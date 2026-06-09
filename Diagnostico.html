@@ -66,6 +66,7 @@
         .led.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; animation: pulse 1.5s infinite; }
         .led.bluetooth { background: #0088ff; box-shadow: 0 0 10px #0088ff; }
         .led.searching { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; animation: pulse 0.5s infinite; }
+        .led.demo { background: #aa55ff; box-shadow: 0 0 10px #aa55ff; animation: pulse 2s infinite; }
 
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -89,6 +90,28 @@
         .btn-secondary:hover { background: #3a3a5a; }
         .btn-danger { background: #ff4444; }
         .btn-success { background: #00aa55; }
+        .btn-warning { background: #ffaa00; color: #1a1a2e; }
+
+        .diagnostic-panel {
+            background: #0f0f1a;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            border: 1px solid #e94560;
+        }
+
+        .diagnostic-step {
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(233, 69, 96, 0.1);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .diagnostic-step.pass { border-left: 3px solid #00ff88; }
+        .diagnostic-step.fail { border-left: 3px solid #ff4444; }
+        .diagnostic-step.warning { border-left: 3px solid #ffaa00; }
 
         .container { display: flex; min-height: calc(100vh - 120px); }
         .sidebar {
@@ -241,7 +264,6 @@
         .log-info { color: #ffaa00; }
         .log-success { color: #00ff88; }
 
-        /* TABS HORIZONTALES para comandos */
         .cmd-tabs {
             display: flex;
             gap: 5px;
@@ -334,7 +356,6 @@
             flex: 1;
         }
 
-        /* Estilos corregidos para la selección de vehículo */
         .brand-group {
             margin-bottom: 15px;
             border: 1px solid #2a2a4a;
@@ -399,13 +420,6 @@
             font-size: 1rem;
         }
 
-        .selected-vehicle {
-            background: #00aa55;
-            padding: 2px 8px;
-            border-radius: 15px;
-            font-size: 0.8rem;
-        }
-
         @media (max-width: 768px) {
             .container { flex-direction: column; }
             .sidebar { width: 100%; display: flex; overflow-x: auto; padding: 10px; }
@@ -432,7 +446,9 @@
         <div>
             <button class="btn btn-secondary" onclick="showVehicleModal()">🚙 Seleccionar Vehículo</button>
             <button class="btn" id="connectBtn" onclick="connectBluetooth()">🔍 Conectar Bluetooth</button>
+            <button class="btn btn-warning" id="diagnosticBtn" onclick="runDiagnostic()">🔧 Diagnóstico</button>
             <button class="btn btn-danger" id="disconnectBtn" onclick="disconnectBluetooth()" style="display:none">❌ Desconectar</button>
+            <button class="btn btn-secondary" id="demoBtn" onclick="enableDemoMode()">🎮 Modo Demo</button>
         </div>
     </div>
 
@@ -447,6 +463,7 @@
             <div class="menu-item" data-page="driving"><span>🎯</span><span>Análisis Conducción</span></div>
             <div class="menu-item" data-page="ecu"><span>💻</span><span>Monitoreo ECU</span></div>
             <div class="menu-item" data-page="alerts"><span>⚠️</span><span>Alertas</span></div>
+            <div class="menu-item" data-page="diagnostic"><span>🔬</span><span>Diagnóstico</span></div>
             <div class="menu-item" data-page="console"><span>📟</span><span>Consola OBD</span></div>
         </div>
 
@@ -503,6 +520,15 @@
                 <button class="btn" onclick="saveAlertConfig()">Guardar Configuración</button>
             </div>
 
+            <div id="diagnostic" class="page">
+                <h2>🔬 Diagnóstico de Conexión Bluetooth</h2>
+                <div class="diagnostic-panel" id="diagnosticResults">
+                    <p>Presione "Iniciar Diagnóstico" para verificar su sistema</p>
+                </div>
+                <button class="btn" onclick="runDiagnostic()">🔍 Iniciar Diagnóstico</button>
+                <button class="btn btn-secondary" onclick="clearDiagnostic()">🗑️ Limpiar</button>
+            </div>
+
             <div id="console" class="page">
                 <h2>📟 Consola OBD-II Interactiva</h2>
                 
@@ -537,109 +563,41 @@
     </div>
 
     <script>
-        // ============================================
-        // BASE DE DATOS COMPLETA DE VEHÍCULOS
-        // ============================================
+        // Base de datos de vehículos (simplificada para el ejemplo)
         const VEHICLE_DATABASE = {
-            "ACURA": { "models": ["ILX", "MDX", "RDX", "TLX", "NSX"] },
-            "ALFA ROMEO": { "models": ["GIULIA", "STELVIO", "TONALE"] },
-            "AUDI": { "models": ["A1", "A3", "A4", "A5", "A6", "A7", "A8", "Q2", "Q3", "Q5", "Q7", "Q8", "E-TRON", "RS3", "RS5", "R8"] },
-            "BAIC": { "models": ["BJ20", "BJ40", "X25", "X35", "D20"] },
-            "BENTLEY": { "models": ["CONTINENTAL", "FLYING SPUR", "BENTAYGA"] },
-            "BMW": { "models": ["SERIE 1", "SERIE 2", "SERIE 3", "SERIE 4", "SERIE 5", "SERIE 7", "X1", "X2", "X3", "X4", "X5", "X6", "X7", "Z4", "i3", "i4", "i8", "M2", "M3", "M4", "M5"] },
-            "BYD": { "models": ["F0", "F3", "S2", "S3", "S7", "E6", "M6", "QIN", "TANG", "SONG", "HAN", "DOLPHIN", "SEAL", "ATTO 3", "YUAN"] },
-            "CHANGAN": { "models": ["CS15", "CS35", "CS55", "CS75", "CS95", "EADO", "ALSVIN"] },
-            "CHERY": { "models": ["IQ", "QQ", "ARRIZO 3", "ARRIZO 5", "ARRIZO 7", "TIGGO 2", "TIGGO 4", "TIGGO 5", "TIGGO 7", "TIGGO 8"] },
-            "CHEVROLET": { "models": ["CRUZE", "SAIL", "JOY", "SPARK", "ONIX", "PRISMA", "TRACKER", "CAPTIVA", "EQUINOX", "TRAILBLAZER", "S10", "MONTANA", "CAMARO", "CORVETTE", "BLAZER"] },
-            "CITROEN": { "models": ["C3", "C4", "C4 CACTUS", "C5", "C-ELYSEE", "BERLINGO", "JUMPY"] },
-            "DODGE": { "models": ["ATTITUDE", "JOURNEY", "DURANGO", "GRAND CARAVAN", "CHALLENGER", "CHARGER"] },
-            "DS AUTOMOBILES": { "models": ["DS3", "DS4", "DS5", "DS7", "DS9"] },
-            "FERRARI": { "models": ["F8", "PORTOFINO", "ROMA", "SF90", "296 GTB", "PISTA"] },
-            "FIAT": { "models": ["MOBI", "UNO", "PALIO", "SIENA", "FIORINO", "DOBLO", "STRADA", "TORO", "TIPO", "500", "500X", "ARGO", "CRONOS"] },
-            "FORD": { "models": ["FIESTA", "FOCUS", "MONDEO", "FUSION", "MUSTANG", "RANGER", "EXPLORER", "TERRITORY", "ECOSPORT", "EDGE", "ESCAPE", "TRANSIT", "F-150", "KA", "FIGO"] },
-            "FOTON": { "models": ["TUNLAND", "VIEW", "AUMARK", "FORLAND"] },
-            "GEELY": { "models": ["GC2", "GC6", "EC7", "EMGRAND", "GS", "COOLRAY", "AZKARRA"] },
-            "GENESIS": { "models": ["G70", "G80", "G90", "GV60", "GV70", "GV80"] },
-            "GREAT WALL": { "models": ["POER", "WINGLE", "HOVER", "H6", "M4", "STEED"] },
-            "HAVAL": { "models": ["H2", "H4", "H6", "H8", "H9", "M6", "JOLION", "DAGO", "TANK 300", "TANK 500"] },
-            "HONDA": { "models": ["CIVIC", "ACCORD", "CR-V", "HR-V", "PILOT", "ODYSSEY", "FIT", "CITY", "NSX", "CR-Z", "RIDGELINE", "PASSPORT"] },
-            "HYUNDAI": { "models": ["GRAND I10", "HB20", "HB20S", "ACCENT", "VERNA", "ELANTRA", "SONATA", "AZERA", "GRAND SANTA FE", "SANTA FE", "TUCSON", "CRETA", "KONA", "KONA ELECTRIC", "IONIQ", "IONIQ 5", "IONIQ 6", "SANTA CRUZ"] },
-            "ISUZU": { "models": ["D-MAX", "MU-X", "NMR", "NPR", "NQR"] },
-            "IVECO": { "models": ["DAILY", "TECTOR", "STRALIS", "EUROCARGO"] },
-            "JAC": { "models": ["E-JS1", "E-JS4", "JS2", "JS3", "JS4", "JS6", "SEI4", "SEI5", "SUNRAY", "X200"] },
-            "JAGUAR": { "models": ["XE", "XF", "XJ", "F-PACE", "E-PACE", "I-PACE", "F-TYPE"] },
-            "JEEP": { "models": ["GRAND CHEROKEE", "CHEROKEE", "COMPASS", "RENEGADE", "WRANGLER", "GLADIATOR", "COMMANDER"] },
-            "KIA": { "models": ["MORNING", "PICANTO", "RIO", "K3", "CERATO", "FORTE", "K5", "OPTIMA", "SPORTAGE", "SORENTO", "TELLURIDE", "CARNIVAL", "SOUL", "STINGER", "NIRO", "EV6", "EV9"] },
-            "LAMBORGHINI": { "models": ["HURACAN", "AVENTADOR", "URUS", "REVUELTO"] },
-            "LAND ROVER": { "models": ["EVOQUE", "VELAR", "DISCOVERY", "DISCOVERY SPORT", "DEFENDER", "RANGE ROVER"] },
-            "LORDSHIP": { "models": ["M10", "M20", "V10", "V20", "T6"] },
-            "MAHINDRA": { "models": ["SCORPIO", "XUV500", "THAR", "KUV100", "BOLERO", "MARAZZO"] },
-            "MASERATI": { "models": ["GHIBLI", "QUATTROPORTE", "LEVANTE", "GRECALE", "MC20"] },
-            "MAZDA": { "models": ["2", "3", "6", "CX-3", "CX-30", "CX-5", "CX-7", "CX-9", "MX-5", "BT-50"] },
-            "MERCEDES BENZ": { "models": ["CLASE A", "CLASE B", "CLASE C", "CLASE E", "CLASE S", "GLA", "GLB", "GLC", "GLE", "GLS", "CLA", "CLS", "VITO", "SPRINTER", "G-CLASS", "EQC", "EQS", "AMG GT"] },
-            "MG": { "models": ["MG3", "MG5", "MG6", "MG ZS", "MG HS", "MG RX5", "MG EHS", "MG MARVEL R", "MG4", "MG CYBERSTER"] },
-            "MINI": { "models": ["COOPER", "COOPER S", "CLUBMAN", "COUNTRYMAN", "PACEMAN"] },
-            "MITSUBISHI": { "models": ["SPACE STAR", "MIRAGE", "LANCER", "ASX", "OUTLANDER", "MONTERO", "PAJERO", "L200", "TRITON"] },
-            "NISSAN": { "models": ["VERSA", "SUNNY", "TIIDA", "SENTRA", "SYLPHY", "MAXIMA", "ALTIMA", "QASHQAI", "X-TRAIL", "MURANO", "PATHFINDER", "FRONTIER", "NP300", "NAVARA", "MARCH", "NOTE", "LEAF", "370Z", "GT-R"] },
-            "OPEL": { "models": ["CORSA", "ASTRA", "INSIGNIA", "MOKKA", "CROSSLAND", "GRANDLAND", "COMBO", "ZAFIRA"] },
-            "PEUGEOT": { "models": ["108", "208", "308", "408", "508", "2008", "3008", "5008", "PARTNER", "EXPERT", "BOXER", "RCZ"] },
-            "PORSCHE": { "models": ["911", "CAYMAN", "BOXSTER", "PANAMERA", "CAYENNE", "MACAN", "TAYCAN"] },
-            "RAM": { "models": ["1500", "2500", "3500", "PROMASTER", "700", "1200"] },
-            "RENAULT": { "models": ["KWID", "SANDERO", "LOGAN", "STEPWAY", "MEGANE", "FLUENCE", "KOLEOS", "DOKKER", "MASTER", "KANGOO", "ZOE", "TWINGO"] },
-            "SCANIA": { "models": ["G410", "R420", "S450", "P360", "K360"] },
-            "SMART": { "models": ["FORTWO", "FORFOUR", "EQ FORTWO"] },
-            "SSANGYONG": { "models": ["TIVOLI", "KORANDO", "REXTON", "MUSSO", "CHAIRMAN", "ACTYON"] },
-            "SUBARU": { "models": ["IMPREZA", "WRX", "XV", "CROSSTREK", "FORESTER", "OUTBACK", "LEGACY", "BRZ", "ASCENT"] },
-            "SUZUKI": { "models": ["ALTO", "CELERIO", "SWIFT", "BALENO", "S-CROSS", "VITARA", "GRAND VITARA", "JIMNY", "CARRY", "APV"] },
-            "TATA": { "models": ["TIAGO", "TIGOR", "NEXON", "HARRIER", "SAFARI", "XENON", "ACE", "SUPER ACE"] },
-            "TESLA": { "models": ["MODEL 3", "MODEL S", "MODEL X", "MODEL Y"] },
-            "TOYOTA": { "models": ["YARIS", "ETIOS", "COROLLA", "CAMRY", "PRIUS", "PRIUS C", "RAV4", "HIGHLANDER", "FORTUNER", "SW4", "HILUX", "LAND CRUISER", "PRADO", "86", "SUPRA", "C-HR", "MIRAI"] },
-            "VOLKSWAGEN": { "models": ["GOL", "POLO", "VENTO", "JETTA", "PASSAT", "T-CROSS", "TAOS", "TIGUAN", "TOUAREG", "AMAROK", "SUV", "BEETLE", "GOLF"] },
-            "VOLVO": { "models": ["XC40", "XC60", "XC90", "S60", "S80", "V60", "V90", "C40", "EX30", "EX90"] },
-            "ZNA": { "models": ["A9", "MAGIC", "V5", "V6", "V7"] }
+            "TOYOTA": { "models": ["YARIS", "COROLLA", "HILUX", "RAV4"] },
+            "HONDA": { "models": ["CIVIC", "ACCORD", "CR-V"] },
+            "NISSAN": { "models": ["VERSA", "SENTRA", "X-TRAIL"] },
+            "CHEVROLET": { "models": ["ONIX", "CRUZE", "SPARK"] },
+            "FORD": { "models": ["FIESTA", "FOCUS", "RANGER"] },
+            "HYUNDAI": { "models": ["ACCENT", "ELANTRA", "TUCSON"] },
+            "KIA": { "models": ["RIO", "SPORTAGE", "SORENTO"] },
+            "VOLKSWAGEN": { "models": ["GOL", "POLO", "T-CROSS"] }
         };
 
         // Comandos OBD-II
         const OBD_COMMANDS_BY_TYPE = {
             "🔧 AT (Configuración)": [
-                { cmd: "ATZ", desc: "Resetear ELM327" }, { cmd: "ATE0", desc: "Desactivar echo" }, { cmd: "ATL0", desc: "Desactivar linefeeds" },
-                { cmd: "ATH0", desc: "Desactivar headers" }, { cmd: "ATSP0", desc: "Protocolo auto" }, { cmd: "ATRV", desc: "Voltaje vehículo" },
+                { cmd: "ATZ", desc: "Resetear ELM327" }, { cmd: "ATE0", desc: "Desactivar echo" },
+                { cmd: "ATL0", desc: "Desactivar linefeeds" }, { cmd: "ATH0", desc: "Desactivar headers" },
+                { cmd: "ATSP0", desc: "Protocolo auto" }, { cmd: "ATRV", desc: "Voltaje vehículo" },
                 { cmd: "ATI", desc: "Versión ELM327" }, { cmd: "ATDP", desc: "Protocolo OBD" }
             ],
             "📊 Mode 01 - Datos en vivo": [
-                { cmd: "010C", desc: "RPM motor" }, { cmd: "010D", desc: "Velocidad" }, { cmd: "0105", desc: "Temp refrigerante" },
-                { cmd: "0104", desc: "Carga motor" }, { cmd: "010F", desc: "Temp aire" }, { cmd: "0110", desc: "Flujo MAF" },
-                { cmd: "0111", desc: "Posición acelerador" }, { cmd: "012F", desc: "Nivel combustible" }, { cmd: "0142", desc: "Voltaje batería" }
+                { cmd: "010C", desc: "RPM motor" }, { cmd: "010D", desc: "Velocidad" },
+                { cmd: "0105", desc: "Temp refrigerante" }, { cmd: "0104", desc: "Carga motor" },
+                { cmd: "0111", desc: "Posición acelerador" }, { cmd: "012F", desc: "Nivel combustible" }
             ],
             "⚠️ Mode 03 - DTC (Fallas)": [
-                { cmd: "03", desc: "Leer códigos DTC" }, { cmd: "04", desc: "Borrar códigos DTC" }, { cmd: "07", desc: "DTC pendientes" }
-            ],
-            "🔬 Mode 02 - Datos congelados": [
-                { cmd: "02", desc: "Datos congelados", example: "02" },
-                { cmd: "0201", desc: "Datos fallo 1", example: "0201" },
-                { cmd: "020C", desc: "RPM en fallo", example: "020C" },
-                { cmd: "020D", desc: "Velocidad en fallo", example: "020D" }
-            ],
-            "🟢 Sensores O2": [
-                { cmd: "0114", desc: "Sensor O2 B1S1", example: "0114" },
-                { cmd: "0115", desc: "Sensor O2 B1S2", example: "0115" },
-                { cmd: "0116", desc: "Sensor O2 B1S3", example: "0116" },
-                { cmd: "0118", desc: "Sensor O2 B1S4", example: "0118" }
-            ],
-            "🏎️ Rendimiento": [
-                { cmd: "010C", desc: "RPM máximos", example: "010C" },
-                { cmd: "010D", desc: "Velocidad máxima", example: "010D" },
-                { cmd: "0111", desc: "Aceleración", example: "0111" },
-                { cmd: "0104", desc: "Carga motor", example: "0104" }
+                { cmd: "03", desc: "Leer códigos DTC" }, { cmd: "04", desc: "Borrar códigos DTC" }
             ]
         };
 
-        // ============================================
-        // VARIABLES GLOBALES
-        // ============================================
+        // Variables globales
         let bluetoothDevice = null;
         let characteristic = null;
         let isConnected = false;
+        let isDemoMode = false;
         let currentMarca = "TOYOTA";
         let currentModelo = "YARIS";
         let currentDTCs = [];
@@ -659,7 +617,81 @@
         };
 
         // ============================================
-        // FUNCIONES DE VEHÍCULO (CORREGIDAS)
+        // FUNCIÓN DE DIAGNÓSTICO MEJORADA
+        // ============================================
+        async function runDiagnostic() {
+            const resultsDiv = document.getElementById('diagnosticResults');
+            resultsDiv.innerHTML = '<div class="diagnostic-step">🔍 Iniciando diagnóstico del sistema...</div>';
+            
+            const steps = [];
+            
+            // Paso 1: Verificar Web Bluetooth
+            steps.push({ name: "Web Bluetooth API", test: () => !!navigator.bluetooth, pass: "✅ Compatible", fail: "❌ No compatible - Use Chrome/Edge/Opera" });
+            
+            // Paso 2: Verificar HTTPS/localhost
+            steps.push({ name: "Conexión Segura", test: () => location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1', pass: "✅ Conexión segura", fail: "⚠️ Se requiere HTTPS o localhost" });
+            
+            // Paso 3: Verificar Bluetooth del sistema
+            if (navigator.bluetooth) {
+                try {
+                    const available = await navigator.bluetooth.getAvailability();
+                    steps.push({ name: "Bluetooth Hardware", test: () => available, pass: "✅ Bluetooth disponible", fail: "❌ Bluetooth no disponible - Active Bluetooth" });
+                } catch(e) {
+                    steps.push({ name: "Bluetooth Hardware", test: () => false, pass: "", fail: "❌ No se pudo verificar Bluetooth" });
+                }
+            } else {
+                steps.push({ name: "Bluetooth Hardware", test: () => false, pass: "", fail: "❌ Web Bluetooth no soportado" });
+            }
+            
+            // Paso 4: Verificar permisos
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const result = await navigator.permissions.query({ name: 'bluetooth' });
+                    steps.push({ name: "Permisos Bluetooth", test: () => result.state === 'granted' || result.state === 'prompt', pass: "✅ Permisos disponibles", fail: "⚠️ Permisos restringidos" });
+                } catch(e) {
+                    steps.push({ name: "Permisos Bluetooth", test: () => true, pass: "⚠️ No se pueden verificar permisos", fail: "" });
+                }
+            }
+            
+            // Mostrar resultados
+            resultsDiv.innerHTML = '<h4>📋 Resultados del Diagnóstico:</h4>';
+            let allPass = true;
+            
+            for (const step of steps) {
+                const result = step.test();
+                const statusClass = result ? 'pass' : 'fail';
+                const statusText = result ? (step.pass || '✅ OK') : (step.fail || '❌ Error');
+                if (!result) allPass = false;
+                resultsDiv.innerHTML += `<div class="diagnostic-step ${statusClass}"><strong>${step.name}:</strong> ${statusText}</div>`;
+            }
+            
+            // Recomendaciones
+            resultsDiv.innerHTML += '<h4>💡 Recomendaciones:</h4>';
+            if (!navigator.bluetooth) {
+                resultsDiv.innerHTML += '<div class="diagnostic-step warning">➡️ Use Google Chrome, Microsoft Edge u Opera en su computadora o Android</div>';
+            }
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                resultsDiv.innerHTML += '<div class="diagnostic-step warning">➡️ La aplicación debe ejecutarse en HTTPS o localhost</div>';
+            }
+            resultsDiv.innerHTML += '<div class="diagnostic-step">➡️ Asegúrese de que el adaptador ELM327 esté conectado al vehículo</div>';
+            resultsDiv.innerHTML += '<div class="diagnostic-step">➡️ El vehículo debe estar encendido (posición contacto)</div>';
+            resultsDiv.innerHTML += '<div class="diagnostic-step">➡️ Verifique que el adaptador esté emparejado en Configuración Bluetooth</div>';
+            resultsDiv.innerHTML += '<div class="diagnostic-step">➡️ Algunos adaptadores requieren que el LED azul parpadee constantemente</div>';
+            resultsDiv.innerHTML += '<div class="diagnostic-step">➡️ Si todo falla, use el MODO DEMO para probar la aplicación</div>';
+            
+            if (allPass) {
+                resultsDiv.innerHTML += '<div class="diagnostic-step pass">✅ Su sistema está listo para conectar un dispositivo OBD-II</div>';
+            }
+            
+            addConsoleLog("🔧 Diagnóstico completado", "info");
+        }
+        
+        function clearDiagnostic() {
+            document.getElementById('diagnosticResults').innerHTML = '<p>Diagnóstico limpiado. Presione "Iniciar Diagnóstico" para verificar su sistema.</p>';
+        }
+
+        // ============================================
+        // FUNCIONES DE VEHÍCULO
         // ============================================
         function showVehicleModal() {
             document.getElementById('vehicleModal').style.display = 'flex';
@@ -674,7 +706,6 @@
             const container = document.getElementById('brandsContainer');
             container.innerHTML = '';
             
-            // Ordenar marcas alfabéticamente
             const sortedBrands = Object.keys(VEHICLE_DATABASE).sort();
             
             for (const brand of sortedBrands) {
@@ -684,27 +715,20 @@
                 group.className = 'brand-group';
                 group.setAttribute('data-brand', brand);
                 
-                // Header de la marca
                 const header = document.createElement('div');
                 header.className = 'brand-header';
                 header.innerHTML = `🚗 ${brand} <span style="font-size: 0.8rem;">▼</span>`;
-                header.onclick = (function(b) {
-                    return function() { toggleBrand(b); };
-                })(brand);
+                header.onclick = (function(b) { return function() { toggleBrand(b); }; })(brand);
                 
-                // Contenedor de modelos (chips)
                 const modelsContainer = document.createElement('div');
                 modelsContainer.className = 'models-list';
                 modelsContainer.id = `brand-models-${brand.replace(/\s/g, '-')}`;
                 
-                // Crear chips para cada modelo
                 models.forEach(model => {
                     const chip = document.createElement('span');
                     chip.className = 'model-chip';
                     chip.textContent = model;
-                    chip.onclick = (function(marca, modelo) {
-                        return function() { selectVehicleModel(marca, modelo); };
-                    })(brand, model);
+                    chip.onclick = (function(marca, modelo) { return function() { selectVehicleModel(marca, modelo); }; })(brand, model);
                     modelsContainer.appendChild(chip);
                 });
                 
@@ -716,9 +740,7 @@
 
         function toggleBrand(brand) {
             const modelsContainer = document.getElementById(`brand-models-${brand.replace(/\s/g, '-')}`);
-            if (modelsContainer) {
-                modelsContainer.classList.toggle('show');
-            }
+            if (modelsContainer) modelsContainer.classList.toggle('show');
         }
 
         function filterBrandsAndModels() {
@@ -738,12 +760,9 @@
                 } else {
                     models.forEach(model => {
                         const modelName = model.textContent.toLowerCase();
-                        if (modelName.includes(searchTerm)) {
-                            hasMatch = true;
-                        }
+                        if (modelName.includes(searchTerm)) hasMatch = true;
                     });
                     group.style.display = hasMatch ? 'block' : 'none';
-                    
                     if (hasMatch) {
                         const modelsContainer = group.querySelector('.models-list');
                         if (modelsContainer) modelsContainer.classList.add('show');
@@ -797,10 +816,7 @@
                         document.getElementById('commandInput').value = cmdInfo.cmd;
                         sendRawCommand();
                     };
-                    cmdCard.innerHTML = `
-                        <div class="cmd-code-h">${cmdInfo.cmd}</div>
-                        <div class="cmd-desc-h">${cmdInfo.desc}</div>
-                    `;
+                    cmdCard.innerHTML = `<div class="cmd-code-h">${cmdInfo.cmd}</div><div class="cmd-desc-h">${cmdInfo.desc}</div>`;
                     cmdList.appendChild(cmdCard);
                 });
                 
@@ -811,41 +827,140 @@
         }
 
         // ============================================
-        // WEB BLUETOOTH API
+        // MODO DEMOSTRACIÓN
+        // ============================================
+        function enableDemoMode() {
+            if (isConnected && !isDemoMode) disconnectBluetooth();
+            isDemoMode = true;
+            isConnected = true;
+            
+            document.getElementById('obdLed').className = 'led demo';
+            document.getElementById('obdStatus').textContent = 'Modo Demo';
+            document.getElementById('btLed').className = 'led demo';
+            document.getElementById('btStatus').textContent = 'Modo Demo';
+            document.getElementById('deviceLed').className = 'led demo';
+            document.getElementById('deviceName').textContent = 'Simulador OBD-II';
+            document.getElementById('connectBtn').style.display = 'none';
+            document.getElementById('disconnectBtn').style.display = 'inline-block';
+            
+            addConsoleLog("🎮 Modo demostración activado - Datos simulados", "info");
+            startDemoPolling();
+        }
+
+        function startDemoPolling() {
+            if (dataInterval) clearInterval(dataInterval);
+            dataInterval = setInterval(() => {
+                if (isDemoMode) {
+                    currentValues.SPEED = Math.floor(Math.random() * 120);
+                    currentValues.RPM = 700 + Math.floor(Math.random() * 5000);
+                    currentValues.COOLANT_TEMP = 80 + Math.floor(Math.random() * 20);
+                    currentValues.THROTTLE_POS = Math.floor(Math.random() * 100);
+                    currentValues.FUEL_LEVEL = Math.max(0, currentValues.FUEL_LEVEL - (Math.random() * 0.5));
+                    if (currentValues.FUEL_LEVEL < 0) currentValues.FUEL_LEVEL = 100;
+                    currentValues.BATTERY_VOLTAGE = 12 + (Math.random() * 2);
+                    
+                    checkAlerts();
+                    updateDashboard();
+                    
+                    if (isLogging) {
+                        logData.push({ timestamp: new Date().toISOString(), ...currentValues });
+                        document.getElementById('loggingStatus').innerHTML = `<p>📝 Registrando... ${logData.length} muestras</p>`;
+                    }
+                }
+            }, 2000);
+        }
+
+        // ============================================
+        // WEB BLUETOOTH API MEJORADA
         // ============================================
         async function connectBluetooth() {
             try {
                 if (!navigator.bluetooth) {
                     addConsoleLog("❌ Web Bluetooth no es compatible. Use Chrome/Edge/Opera.", "error");
-                    alert("Web Bluetooth no es compatible. Use Chrome, Edge u Opera.");
+                    addConsoleLog("💡 Use el MODO DEMO para probar la aplicación", "info");
+                    alert("Web Bluetooth no es compatible.\n\n✅ Use Google Chrome, Microsoft Edge u Opera\n✅ Active el Modo Demo para probar");
                     return;
                 }
+                
                 addConsoleLog("🔍 Buscando dispositivos ELM327...", "info");
+                addConsoleLog("💡 Asegúrese de que:", "info");
+                addConsoleLog("   1️⃣ Adaptador OBD-II conectado al vehículo", "info");
+                addConsoleLog("   2️⃣ Vehículo encendido (posición contacto)", "info");
+                addConsoleLog("   3️⃣ Adaptador emparejado en Bluetooth del sistema", "info");
+                
                 document.getElementById('btLed').className = 'led searching';
                 document.getElementById('btStatus').textContent = 'Bluetooth: Buscando...';
 
+                // Intento con filtros más amplios
                 bluetoothDevice = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { namePrefix: "OBD" }, { namePrefix: "ELM" }, { namePrefix: "CAR" },
-                        { namePrefix: "V-Link" }, { namePrefix: "OBDII" }, { namePrefix: "ELM327" }
-                    ],
-                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        '0000ffe0-0000-1000-8000-00805f9b34fb',
+                        '0000180a-0000-1000-8000-00805f9b34fb',
+                        '0000180f-0000-1000-8000-00805f9b34fb'
+                    ]
                 });
 
-                addConsoleLog(`✅ Dispositivo: ${bluetoothDevice.name || 'ELM327'}`, "success");
+                if (!bluetoothDevice) throw new Error("No se seleccionó ningún dispositivo");
+
+                addConsoleLog(`✅ Dispositivo encontrado: ${bluetoothDevice.name || 'ELM327'}`, "success");
                 document.getElementById('deviceName').textContent = bluetoothDevice.name || 'ELM327';
                 document.getElementById('deviceLed').className = 'led connected';
 
                 bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
-                const server = await bluetoothDevice.gatt.connect();
-                addConsoleLog("🔗 Conectado al servidor GATT", "success");
                 
-                const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-                characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-                await characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', handleDataReceived);
+                addConsoleLog("🔗 Conectando al servidor GATT...", "info");
+                const server = await bluetoothDevice.gatt.connect();
+                addConsoleLog("✅ Conectado al servidor GATT", "success");
+                
+                // Buscar servicio OBD-II
+                let service;
+                try {
+                    service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                } catch (e) {
+                    addConsoleLog("⚠️ Buscando servicios disponibles...", "info");
+                    const services = await server.getPrimaryServices();
+                    for (let s of services) {
+                        addConsoleLog(`📋 Servicio: ${s.uuid}`, "info");
+                        if (s.uuid.includes('ffe0') || s.uuid.includes('ff10')) {
+                            service = s;
+                            break;
+                        }
+                    }
+                    if (!service) throw new Error("No se encontró servicio OBD-II");
+                }
+                
+                // Buscar característica
+                const characteristics = await service.getCharacteristics();
+                for (let c of characteristics) {
+                    addConsoleLog(`📋 Característica: ${c.uuid}`, "info");
+                    if (c.uuid.includes('ffe1') || c.uuid.includes('ff11')) {
+                        characteristic = c;
+                        break;
+                    }
+                }
+                
+                if (!characteristic) {
+                    // Intentar con la primera característica que tenga escritura
+                    for (let c of characteristics) {
+                        const props = c.properties;
+                        if (props.write || props.writeWithoutResponse) {
+                            characteristic = c;
+                            addConsoleLog(`✅ Usando característica alternativa: ${c.uuid}`, "success");
+                            break;
+                        }
+                    }
+                }
+                
+                if (!characteristic) throw new Error("No se encontró característica para comunicación");
+                
+                if (characteristic.properties.notify || characteristic.properties.indicate) {
+                    await characteristic.startNotifications();
+                    characteristic.addEventListener('characteristicvaluechanged', handleDataReceived);
+                }
                 
                 isConnected = true;
+                isDemoMode = false;
                 document.getElementById('obdLed').className = 'led connected';
                 document.getElementById('obdStatus').textContent = 'Conectado';
                 document.getElementById('btLed').className = 'led bluetooth';
@@ -858,14 +973,27 @@
                 startDataPolling();
             } catch (error) {
                 addConsoleLog(`❌ Error: ${error.message}`, "error");
-                document.getElementById('btLed').className = 'led bluetooth';
+                if (error.message.includes('choosing a device')) {
+                    addConsoleLog("💡 No seleccionó ningún dispositivo", "info");
+                } else if (error.message.includes('User cancelled')) {
+                    addConsoleLog("💡 Búsqueda cancelada por el usuario", "info");
+                } else {
+                    addConsoleLog("💡 Verifique:", "info");
+                    addConsoleLog("   • El adaptador esté encendido (LED encendido)", "info");
+                    addConsoleLog("   • El vehículo esté encendido", "info");
+                    addConsoleLog("   • El adaptador esté emparejado en Windows/Android", "info");
+                }
+                document.getElementById('btLed').className = 'led';
                 document.getElementById('btStatus').textContent = 'Bluetooth: Error';
+                document.getElementById('connectBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
             }
         }
 
         async function initializeELM327() {
+            addConsoleLog("⚙️ Configurando ELM327...", "info");
             await sendCommand("ATZ");
-            await sleep(500);
+            await sleep(1000);
             await sendCommand("ATE0");
             await sleep(200);
             await sendCommand("ATL0");
@@ -874,18 +1002,28 @@
             await sleep(200);
             await sendCommand("ATSP0");
             await sleep(500);
-            addConsoleLog("✅ ELM327 inicializado", "success");
+            addConsoleLog("✅ ELM327 inicializado correctamente", "success");
         }
 
         async function sendCommand(cmd) {
-            if (!characteristic) return null;
+            if (!characteristic && !isDemoMode) {
+                addConsoleLog("❌ No hay conexión activa", "error");
+                return false;
+            }
+            
+            if (isDemoMode) {
+                addConsoleLog(`📤 [DEMO] Enviado: ${cmd}`, "info");
+                await sleep(100);
+                return true;
+            }
+            
             try {
                 const encoder = new TextEncoder();
                 await characteristic.writeValue(encoder.encode(cmd + "\r"));
                 addConsoleLog(`📤 Enviado: ${cmd}`, "info");
                 return true;
             } catch (error) {
-                addConsoleLog(`❌ Error: ${error.message}`, "error");
+                addConsoleLog(`❌ Error al enviar comando: ${error.message}`, "error");
                 return false;
             }
         }
@@ -909,34 +1047,23 @@
             const value = event.target.value;
             const decoder = new TextDecoder();
             const response = decoder.decode(value);
-            const cleanResponse = response.trim();
-            addConsoleLog(`📥 Recibido: ${cleanResponse}`, "success");
-            
-            if (cleanResponse.includes("41 0D")) {
-                const speed = parseInt(cleanResponse.match(/41 0D ([0-9A-F]{2})/)?.[1], 16);
-                if (!isNaN(speed)) currentValues.SPEED = speed;
-            } else if (cleanResponse.includes("41 0C")) {
-                const rpmHex = cleanResponse.match(/41 0C ([0-9A-F]{2}) ([0-9A-F]{2})/);
-                if (rpmHex) currentValues.RPM = (parseInt(rpmHex[1], 16) * 256 + parseInt(rpmHex[2], 16)) / 4;
-            } else if (cleanResponse.includes("41 05")) {
-                const temp = parseInt(cleanResponse.match(/41 05 ([0-9A-F]{2})/)?.[1], 16) - 40;
-                if (!isNaN(temp)) currentValues.COOLANT_TEMP = temp;
-            }
+            addConsoleLog(`📥 Recibido: ${response.trim()}`, "success");
         }
 
-        async function startDataPolling() {
+        function startDataPolling() {
             if (dataInterval) clearInterval(dataInterval);
             dataInterval = setInterval(async () => {
-                if (isConnected && characteristic) {
-                    const commands = { SPEED: "010D", RPM: "010C", COOLANT_TEMP: "0105", THROTTLE_POS: "0111", FUEL_LEVEL: "012F" };
-                    for (const [key, cmd] of Object.entries(commands)) {
-                        await sendCommand(cmd);
-                        await sleep(80);
-                    }
+                if (isConnected && characteristic && !isDemoMode) {
+                    await sendCommand("010D");
+                    await sleep(100);
+                    await sendCommand("010C");
+                    await sleep(100);
+                    await sendCommand("0105");
                     checkAlerts();
                     updateDashboard();
-                    if (isLogging) { 
-                        logData.push({ timestamp: new Date().toISOString(), ...currentValues }); 
+                    
+                    if (isLogging) {
+                        logData.push({ timestamp: new Date().toISOString(), ...currentValues });
                         document.getElementById('loggingStatus').innerHTML = `<p>📝 Registrando... ${logData.length} muestras</p>`;
                     }
                 }
@@ -945,19 +1072,37 @@
 
         function onDisconnected() {
             addConsoleLog("⚠️ Dispositivo desconectado", "error");
-            isConnected = false;
-            document.getElementById('obdLed').className = 'led';
-            document.getElementById('obdStatus').textContent = 'Desconectado';
-            document.getElementById('btLed').className = 'led';
-            document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
-            document.getElementById('connectBtn').style.display = 'inline-block';
-            document.getElementById('disconnectBtn').style.display = 'none';
-            document.getElementById('deviceLed').className = 'led';
-            if (dataInterval) clearInterval(dataInterval);
+            if (!isDemoMode) {
+                isConnected = false;
+                document.getElementById('obdLed').className = 'led';
+                document.getElementById('obdStatus').textContent = 'Desconectado';
+                document.getElementById('btLed').className = 'led';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
+                document.getElementById('connectBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+                document.getElementById('deviceLed').className = 'led';
+                document.getElementById('deviceName').textContent = 'Sin dispositivo';
+                if (dataInterval) clearInterval(dataInterval);
+            }
         }
 
         function disconnectBluetooth() {
-            if (bluetoothDevice && bluetoothDevice.gatt.connected) bluetoothDevice.gatt.disconnect();
+            if (isDemoMode) {
+                isDemoMode = false;
+                isConnected = false;
+                if (dataInterval) clearInterval(dataInterval);
+                document.getElementById('obdLed').className = 'led';
+                document.getElementById('obdStatus').textContent = 'Desconectado';
+                document.getElementById('btLed').className = 'led';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
+                document.getElementById('deviceLed').className = 'led';
+                document.getElementById('deviceName').textContent = 'Sin dispositivo';
+                document.getElementById('connectBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+                addConsoleLog("🎮 Modo Demo desactivado", "info");
+            } else if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            }
             onDisconnected();
         }
 
@@ -1018,23 +1163,109 @@
                 let value = currentValues[g.pid] || 0;
                 let percent = Math.min(100, Math.max(0, ((value - g.min) / (g.max - g.min)) * 100));
                 let color = percent > 80 ? '#e94560' : (percent > 60 ? '#ffaa00' : '#00ff88');
-                return `<div class="gauge-card"><div>${g.icon} ${g.name}</div><div class="gauge-value" style="color:${color}">${value.toFixed(1)}</div><div class="gauge-unit">${g.unit}</div><div class="gauge-bar"><div class="gauge-fill" style="width:${percent}%"></div></div></div>`;
+                let displayValue = g.pid === 'RPM' ? Math.round(value) : value.toFixed(1);
+                return `<div class="gauge-card"><div>${g.icon} ${g.name}</div><div class="gauge-value" style="color:${color}">${displayValue}</div><div class="gauge-unit">${g.unit}</div><div class="gauge-bar"><div class="gauge-fill" style="width:${percent}%"></div></div></div>`;
             }).join('');
         }
 
-        async function readDTC() { if (!isConnected) { alert('Conecte OBD-II'); return; } await sendCommand("03"); await sleep(500); }
-        function displayDTCList() { document.getElementById('dtcList').innerHTML = currentDTCs.length === 0 ? '<p>✅ No hay códigos</p>' : `<table class="data-table"><table><th>Código</th></tr>${currentDTCs.map(d => `<tr><td>${d}</td></tr>`).join('')}每月`; }
-        async function clearDTC() { if (!isConnected) return; if (confirm('¿Borrar códigos?')) { await sendCommand("04"); await sleep(500); currentDTCs = []; displayDTCList(); addConsoleLog("✅ Códigos borrados", "success"); } }
-        function startPerformanceTest(type) { alert(`Prueba ${type === '0-100' ? '0-100 km/h' : '1/4 milla'} - Acelere`); }
-        function startDataLogging() { if (isLogging) return; isLogging = true; logData = []; document.getElementById('loggingStatus').innerHTML = '<p>📝 Registrando...</p>'; addConsoleLog("📝 Inicio registro", "success"); }
-        function stopDataLogging() { if (isLogging && logData.length) { const csv = convertToCSV(logData); downloadCSV(csv, `obd_log_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`); document.getElementById('loggingStatus').innerHTML = `<p>✅ Guardado: ${logData.length} muestras</p>`; addConsoleLog(`✅ Guardado: ${logData.length} muestras`, "success"); isLogging = false; } else if (isLogging) { isLogging = false; document.getElementById('loggingStatus').innerHTML = '<p>⏹️ Detenido</p>'; } }
-        function convertToCSV(data) { const headers = Object.keys(data[0]); return [headers.join(','), ...data.map(row => headers.map(h => JSON.stringify(row[h] || '')).join(','))].join('\n'); }
-        function downloadCSV(csv, filename) { const blob = new Blob([csv], { type: 'text/csv' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); }
-        function showMaintenanceStatus() { const km = parseInt(document.getElementById('currentKm').value); if (!km) { alert('Ingrese kilometraje'); return; } const intervals = [{ name: 'Cambio de aceite', interval: 10000, icon: '🛢️' }, { name: 'Filtro de aire', interval: 20000, icon: '🌬️' }, { name: 'Bujías', interval: 60000, icon: '⚡' }]; document.getElementById('maintenanceStatus').innerHTML = intervals.map(s => { let nextKm = Math.ceil(km / s.interval) * s.interval; let remaining = nextKm - km; let percent = ((km % s.interval) / s.interval) * 100; return `<div class="maintenance-item"><div>${s.icon} ${s.name}</div><div class="progress-container"><div class="progress-label"><span>Próximo servicio</span><span>${remaining} km</span></div><div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>`; }).join(''); }
-        function startDrivingAnalysis() { alert("Análisis de conducción por 60 segundos."); }
-        async function readECUInfo() { if (!isConnected) return; await sendCommand("ATI"); await sleep(300); document.getElementById('ecuInfo').innerHTML = `<table class="data-table"><tr><th>Parámetro</th><th>Valor</th></tr><tr><td>Vehículo</td><td>${currentMarca} ${currentModelo}</td></tr><tr><td>ELM327</td><td>v1.5</td></tr></table>`; }
-        function loadAlertConfig() { document.getElementById('alertConfig').innerHTML = Object.entries(alertThresholds).map(([pid, t]) => `<div class="maintenance-item"><strong>${pid}</strong><input type="number" id="alert_${pid}_warning" placeholder="Advertencia" value="${t.warning || ''}"><input type="number" id="alert_${pid}_critical" placeholder="Crítico" value="${t.critical || t.critical_max || ''}"></div>`).join(''); }
-        function saveAlertConfig() { for (let pid of Object.keys(alertThresholds)) { let warning = document.getElementById(`alert_${pid}_warning`)?.value; let critical = document.getElementById(`alert_${pid}_critical`)?.value; if (warning) alertThresholds[pid].warning = parseFloat(warning); if (critical) { if (alertThresholds[pid].critical) alertThresholds[pid].critical = parseFloat(critical); if (alertThresholds[pid].critical_max) alertThresholds[pid].critical_max = parseFloat(critical); } } alert('✅ Configuración guardada'); }
+        async function readDTC() { 
+            if (!isConnected) { alert('⚠️ Conecte un dispositivo OBD-II o active el Modo Demo'); return; } 
+            await sendCommand("03"); 
+            addConsoleLog("📋 Lectura de códigos DTC solicitada", "info");
+        }
+        
+        async function clearDTC() { 
+            if (!isConnected) { alert('⚠️ Conecte un dispositivo OBD-II'); return; }
+            if (confirm('⚠️ ¿Borrar códigos de falla?')) { 
+                await sendCommand("04"); 
+                currentDTCs = []; 
+                addConsoleLog("✅ Códigos DTC borrados", "success"); 
+            } 
+        }
+        
+        function startPerformanceTest(type) { 
+            addConsoleLog(`🏁 Iniciando prueba: ${type === '0-100' ? '0-100 km/h' : '1/4 milla'}`, "info");
+            alert(`Prueba ${type === '0-100' ? '0-100 km/h' : '1/4 milla'} - Acelere a fondo`);
+        }
+        
+        function startDataLogging() { 
+            if (isLogging) return; 
+            isLogging = true; 
+            logData = []; 
+            document.getElementById('loggingStatus').innerHTML = '<p>📝 Registrando datos...</p>'; 
+            addConsoleLog("📝 Inicio de registro", "success"); 
+        }
+        
+        function stopDataLogging() { 
+            if (isLogging && logData.length) { 
+                const csv = convertToCSV(logData); 
+                downloadCSV(csv, `obd_log_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`); 
+                document.getElementById('loggingStatus').innerHTML = `<p>✅ Guardado: ${logData.length} muestras</p>`; 
+                addConsoleLog(`✅ Guardado: ${logData.length} muestras`, "success"); 
+                isLogging = false; 
+            } else if (isLogging) { 
+                isLogging = false; 
+                document.getElementById('loggingStatus').innerHTML = '<p>⏹️ Detenido</p>'; 
+            }
+        }
+        
+        function convertToCSV(data) { 
+            if (!data.length) return "";
+            const headers = Object.keys(data[0]); 
+            return [headers.join(','), ...data.map(row => headers.map(h => JSON.stringify(row[h] || '')).join(','))].join('\n'); 
+        }
+        
+        function downloadCSV(csv, filename) { 
+            const blob = new Blob([csv], { type: 'text/csv' }); 
+            const link = document.createElement('a'); 
+            link.href = URL.createObjectURL(blob); 
+            link.download = filename; 
+            link.click(); 
+        }
+        
+        function showMaintenanceStatus() { 
+            const km = parseInt(document.getElementById('currentKm').value); 
+            if (!km) { alert('Ingrese kilometraje'); return; } 
+            const intervals = [
+                { name: 'Cambio de aceite', interval: 10000, icon: '🛢️' },
+                { name: 'Filtro de aire', interval: 20000, icon: '🌬️' },
+                { name: 'Bujías', interval: 60000, icon: '⚡' }
+            ];
+            document.getElementById('maintenanceStatus').innerHTML = intervals.map(s => { 
+                let nextKm = Math.ceil(km / s.interval) * s.interval; 
+                let remaining = nextKm - km; 
+                let percent = ((km % s.interval) / s.interval) * 100; 
+                return `<div class="maintenance-item"><div>${s.icon} ${s.name}</div><div class="progress-container"><div class="progress-label"><span>Próximo</span><span>${remaining} km</span></div><div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>`; 
+            }).join(''); 
+        }
+        
+        function startDrivingAnalysis() { 
+            addConsoleLog("🎯 Análisis de conducción iniciado", "info");
+            alert("Análisis de conducción por 60 segundos.");
+        }
+        
+        async function readECUInfo() { 
+            if (!isConnected) { alert('Conecte OBD-II'); return; }
+            await sendCommand("ATI"); 
+            document.getElementById('ecuInfo').innerHTML = `<table class="data-table"><tr><th>Parámetro</th><th>Valor</th></tr><tr><td>Vehículo</td><td>${currentMarca} ${currentModelo}</td></tr><tr><td>ELM327</td><td>v1.5</td></tr></table>`; 
+        }
+        
+        function loadAlertConfig() { 
+            document.getElementById('alertConfig').innerHTML = Object.entries(alertThresholds).map(([pid, t]) => `<div class="maintenance-item"><strong>${pid}</strong><input type="number" id="alert_${pid}_warning" placeholder="Advertencia" value="${t.warning || ''}"><input type="number" id="alert_${pid}_critical" placeholder="Crítico" value="${t.critical || t.critical_max || ''}"></div>`).join(''); 
+        }
+        
+        function saveAlertConfig() { 
+            for (let pid of Object.keys(alertThresholds)) { 
+                let warning = document.getElementById(`alert_${pid}_warning`)?.value; 
+                let critical = document.getElementById(`alert_${pid}_critical`)?.value; 
+                if (warning) alertThresholds[pid].warning = parseFloat(warning); 
+                if (critical) { 
+                    if (alertThresholds[pid].critical) alertThresholds[pid].critical = parseFloat(critical); 
+                    if (alertThresholds[pid].critical_max) alertThresholds[pid].critical_max = parseFloat(critical); 
+                } 
+            } 
+            alert('✅ Configuración guardada'); 
+        }
 
         // ============================================
         // INICIALIZACIÓN
@@ -1050,6 +1281,8 @@
             });
             loadCommandTabs();
             loadAlertConfig();
+            addConsoleLog("🚀 Aplicación inicializada", "success");
+            addConsoleLog("💡 Use 'Diagnóstico' para verificar compatibilidad", "info");
         }
         init();
     </script>
