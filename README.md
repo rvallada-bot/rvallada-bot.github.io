@@ -66,6 +66,7 @@
         .led.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; animation: pulse 1.5s infinite; }
         .led.bluetooth { background: #0088ff; box-shadow: 0 0 10px #0088ff; }
         .led.searching { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; animation: pulse 0.5s infinite; }
+        .led.demo { background: #aa55ff; box-shadow: 0 0 10px #aa55ff; animation: pulse 2s infinite; }
 
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -433,6 +434,7 @@
             <button class="btn btn-secondary" onclick="showVehicleModal()">🚙 Seleccionar Vehículo</button>
             <button class="btn" id="connectBtn" onclick="connectBluetooth()">🔍 Conectar Bluetooth</button>
             <button class="btn btn-danger" id="disconnectBtn" onclick="disconnectBluetooth()" style="display:none">❌ Desconectar</button>
+            <button class="btn btn-secondary" id="demoBtn" onclick="enableDemoMode()" style="display:inline-block">🎮 Modo Demo</button>
         </div>
     </div>
 
@@ -640,6 +642,7 @@
         let bluetoothDevice = null;
         let characteristic = null;
         let isConnected = false;
+        let isDemoMode = false;
         let currentMarca = "TOYOTA";
         let currentModelo = "YARIS";
         let currentDTCs = [];
@@ -649,6 +652,7 @@
         let activeAlerts = {};
         let logData = [];
         let commandHistory = [];
+        let pendingResponses = [];
 
         let alertThresholds = {
             SPEED: { warning: 120, critical: 160, unit: "km/h" },
@@ -811,61 +815,148 @@
         }
 
         // ============================================
-        // WEB BLUETOOTH API
+        // MODO DEMOSTRACIÓN
+        // ============================================
+        function enableDemoMode() {
+            if (isConnected) {
+                disconnectBluetooth();
+            }
+            isDemoMode = true;
+            isConnected = true;
+            
+            document.getElementById('obdLed').className = 'led demo';
+            document.getElementById('obdStatus').textContent = 'Modo Demo';
+            document.getElementById('btLed').className = 'led demo';
+            document.getElementById('btStatus').textContent = 'Modo Demo';
+            document.getElementById('deviceLed').className = 'led demo';
+            document.getElementById('deviceName').textContent = 'Simulador OBD-II';
+            document.getElementById('connectBtn').style.display = 'none';
+            document.getElementById('disconnectBtn').style.display = 'inline-block';
+            document.getElementById('demoBtn').style.display = 'none';
+            
+            addConsoleLog("🎮 Modo demostración activado - Datos simulados", "info");
+            startDemoPolling();
+        }
+
+        function startDemoPolling() {
+            if (dataInterval) clearInterval(dataInterval);
+            dataInterval = setInterval(() => {
+                if (isDemoMode) {
+                    // Simular cambios realistas en los datos
+                    currentValues.SPEED = Math.floor(Math.random() * 120);
+                    currentValues.RPM = 700 + Math.floor(Math.random() * 5000);
+                    currentValues.COOLANT_TEMP = 80 + Math.floor(Math.random() * 20);
+                    currentValues.THROTTLE_POS = Math.floor(Math.random() * 100);
+                    currentValues.FUEL_LEVEL = Math.max(0, currentValues.FUEL_LEVEL - (Math.random() * 0.5));
+                    if (currentValues.FUEL_LEVEL < 0) currentValues.FUEL_LEVEL = 100;
+                    currentValues.BATTERY_VOLTAGE = 12 + (Math.random() * 2);
+                    
+                    checkAlerts();
+                    updateDashboard();
+                    
+                    if (isLogging) {
+                        logData.push({ timestamp: new Date().toISOString(), ...currentValues });
+                        document.getElementById('loggingStatus').innerHTML = `<p>📝 Registrando... ${logData.length} muestras</p>`;
+                    }
+                }
+            }, 2000);
+        }
+
+        // ============================================
+        // WEB BLUETOOTH API MEJORADA
         // ============================================
         async function connectBluetooth() {
             try {
                 if (!navigator.bluetooth) {
                     addConsoleLog("❌ Web Bluetooth no es compatible. Use Chrome/Edge/Opera.", "error");
-                    alert("Web Bluetooth no es compatible. Use Chrome, Edge u Opera.");
+                    addConsoleLog("💡 Puede usar el Modo Demo para probar la aplicación", "info");
+                    alert("Web Bluetooth no es compatible. Use Chrome, Edge u Opera, o active el Modo Demo.");
                     return;
                 }
+                
                 addConsoleLog("🔍 Buscando dispositivos ELM327...", "info");
+                addConsoleLog("💡 Asegúrese de que el adaptador OBD-II esté conectado y el vehículo encendido", "info");
+                
                 document.getElementById('btLed').className = 'led searching';
                 document.getElementById('btStatus').textContent = 'Bluetooth: Buscando...';
 
                 bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: false,
                     filters: [
-                        { namePrefix: "OBD" }, { namePrefix: "ELM" }, { namePrefix: "CAR" },
-                        { namePrefix: "V-Link" }, { namePrefix: "OBDII" }, { namePrefix: "ELM327" }
+                        { namePrefix: "OBD" },
+                        { namePrefix: "ELM" },
+                        { namePrefix: "CAR" },
+                        { namePrefix: "V-Link" },
+                        { namePrefix: "OBDII" },
+                        { namePrefix: "ELM327" },
+                        { namePrefix: "ScanTool" },
+                        { namePrefix: "OBDLink" },
+                        { namePrefix: "CBT" },
+                        { namePrefix: "vLinker" }
                     ],
-                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '0000180a-0000-1000-8000-00805f9b34fb']
                 });
 
-                addConsoleLog(`✅ Dispositivo: ${bluetoothDevice.name || 'ELM327'}`, "success");
+                if (!bluetoothDevice) {
+                    throw new Error("No se seleccionó ningún dispositivo");
+                }
+
+                addConsoleLog(`✅ Dispositivo encontrado: ${bluetoothDevice.name || 'ELM327'}`, "success");
                 document.getElementById('deviceName').textContent = bluetoothDevice.name || 'ELM327';
                 document.getElementById('deviceLed').className = 'led connected';
 
                 bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
-                const server = await bluetoothDevice.gatt.connect();
-                addConsoleLog("🔗 Conectado al servidor GATT", "success");
                 
-                const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                addConsoleLog("🔗 Conectando al servidor GATT...", "info");
+                const server = await bluetoothDevice.gatt.connect();
+                addConsoleLog("✅ Conectado al servidor GATT", "success");
+                
+                addConsoleLog("🔍 Buscando servicio OBD-II...", "info");
+                let service;
+                try {
+                    service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                } catch (e) {
+                    addConsoleLog("⚠️ No se encontró el servicio estándar, buscando alternativas...", "info");
+                    const services = await server.getPrimaryServices();
+                    for (let s of services) {
+                        addConsoleLog(`📋 Servicio disponible: ${s.uuid}`, "info");
+                    }
+                    throw new Error("No se encontró el servicio OBD-II esperado");
+                }
+                
+                addConsoleLog("🔍 Buscando característica de datos...", "info");
                 characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+                
                 await characteristic.startNotifications();
                 characteristic.addEventListener('characteristicvaluechanged', handleDataReceived);
                 
                 isConnected = true;
+                isDemoMode = false;
                 document.getElementById('obdLed').className = 'led connected';
                 document.getElementById('obdStatus').textContent = 'Conectado';
                 document.getElementById('btLed').className = 'led bluetooth';
                 document.getElementById('btStatus').textContent = 'Bluetooth: Conectado';
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('disconnectBtn').style.display = 'inline-block';
+                document.getElementById('demoBtn').style.display = 'inline-block';
                 
                 addConsoleLog("🎉 Conexión exitosa! Inicializando ELM327...", "success");
                 await initializeELM327();
                 startDataPolling();
             } catch (error) {
                 addConsoleLog(`❌ Error: ${error.message}`, "error");
-                document.getElementById('btLed').className = 'led bluetooth';
+                addConsoleLog("💡 Consejo: Verifique que el adaptador esté emparejado y encendido", "info");
+                document.getElementById('btLed').className = 'led';
                 document.getElementById('btStatus').textContent = 'Bluetooth: Error';
+                document.getElementById('connectBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
             }
         }
 
         async function initializeELM327() {
+            addConsoleLog("⚙️ Configurando ELM327...", "info");
             await sendCommand("ATZ");
-            await sleep(500);
+            await sleep(1000);
             await sendCommand("ATE0");
             await sleep(200);
             await sendCommand("ATL0");
@@ -874,19 +965,66 @@
             await sleep(200);
             await sendCommand("ATSP0");
             await sleep(500);
-            addConsoleLog("✅ ELM327 inicializado", "success");
+            addConsoleLog("✅ ELM327 inicializado correctamente", "success");
         }
 
         async function sendCommand(cmd) {
-            if (!characteristic) return null;
+            if (!characteristic && !isDemoMode) {
+                addConsoleLog("❌ No hay conexión activa", "error");
+                return false;
+            }
+            
+            if (isDemoMode) {
+                addConsoleLog(`📤 [DEMO] Enviado: ${cmd}`, "info");
+                await sleep(100);
+                const demoResponse = simulateResponse(cmd);
+                if (demoResponse) {
+                    addConsoleLog(`📥 [DEMO] Recibido: ${demoResponse}`, "success");
+                    parseResponse(demoResponse);
+                }
+                return true;
+            }
+            
             try {
                 const encoder = new TextEncoder();
                 await characteristic.writeValue(encoder.encode(cmd + "\r"));
                 addConsoleLog(`📤 Enviado: ${cmd}`, "info");
                 return true;
             } catch (error) {
-                addConsoleLog(`❌ Error: ${error.message}`, "error");
+                addConsoleLog(`❌ Error al enviar comando: ${error.message}`, "error");
                 return false;
+            }
+        }
+
+        function simulateResponse(cmd) {
+            const responses = {
+                "ATZ": "ELM327 v1.5",
+                "ATE0": "OK",
+                "ATL0": "OK",
+                "ATH0": "OK",
+                "ATSP0": "OK",
+                "ATI": "ELM327 v1.5",
+                "ATRV": "12.5V",
+                "ATDP": "AUTO",
+                "010C": "41 0C 0F A0",
+                "010D": "41 0D 4B",
+                "0105": "41 05 55",
+                "03": "43 01 02 03",
+                "04": "OK"
+            };
+            return responses[cmd] || "NO DATA";
+        }
+
+        function parseResponse(response) {
+            if (response.includes("41 0D")) {
+                const speed = parseInt(response.match(/41 0D ([0-9A-F]{2})/)?.[1], 16);
+                if (!isNaN(speed)) currentValues.SPEED = speed;
+            } else if (response.includes("41 0C")) {
+                const rpmHex = response.match(/41 0C ([0-9A-F]{2}) ([0-9A-F]{2})/);
+                if (rpmHex) currentValues.RPM = (parseInt(rpmHex[1], 16) * 256 + parseInt(rpmHex[2], 16)) / 4;
+            } else if (response.includes("41 05")) {
+                const temp = parseInt(response.match(/41 05 ([0-9A-F]{2})/)?.[1], 16) - 40;
+                if (!isNaN(temp)) currentValues.COOLANT_TEMP = temp;
             }
         }
 
@@ -909,55 +1047,74 @@
             const value = event.target.value;
             const decoder = new TextDecoder();
             const response = decoder.decode(value);
-            const cleanResponse = response.trim();
-            addConsoleLog(`📥 Recibido: ${cleanResponse}`, "success");
             
-            if (cleanResponse.includes("41 0D")) {
-                const speed = parseInt(cleanResponse.match(/41 0D ([0-9A-F]{2})/)?.[1], 16);
-                if (!isNaN(speed)) currentValues.SPEED = speed;
-            } else if (cleanResponse.includes("41 0C")) {
-                const rpmHex = cleanResponse.match(/41 0C ([0-9A-F]{2}) ([0-9A-F]{2})/);
-                if (rpmHex) currentValues.RPM = (parseInt(rpmHex[1], 16) * 256 + parseInt(rpmHex[2], 16)) / 4;
-            } else if (cleanResponse.includes("41 05")) {
-                const temp = parseInt(cleanResponse.match(/41 05 ([0-9A-F]{2})/)?.[1], 16) - 40;
-                if (!isNaN(temp)) currentValues.COOLANT_TEMP = temp;
+            // Procesar múltiples líneas de respuesta
+            const lines = response.split('\n');
+            for (const line of lines) {
+                const cleanLine = line.trim();
+                if (cleanLine && !cleanLine.includes('>')) {
+                    addConsoleLog(`📥 Recibido: ${cleanLine}`, "success");
+                    parseResponse(cleanLine);
+                }
             }
         }
 
-        async function startDataPolling() {
+        function startDataPolling() {
             if (dataInterval) clearInterval(dataInterval);
             dataInterval = setInterval(async () => {
-                if (isConnected && characteristic) {
-                    const commands = { SPEED: "010D", RPM: "010C", COOLANT_TEMP: "0105", THROTTLE_POS: "0111", FUEL_LEVEL: "012F" };
-                    for (const [key, cmd] of Object.entries(commands)) {
+                if (isConnected && characteristic && !isDemoMode) {
+                    const commands = ["010D", "010C", "0105"];
+                    for (const cmd of commands) {
                         await sendCommand(cmd);
-                        await sleep(80);
+                        await sleep(100);
                     }
                     checkAlerts();
                     updateDashboard();
-                    if (isLogging) { 
-                        logData.push({ timestamp: new Date().toISOString(), ...currentValues }); 
+                    
+                    if (isLogging) {
+                        logData.push({ timestamp: new Date().toISOString(), ...currentValues });
                         document.getElementById('loggingStatus').innerHTML = `<p>📝 Registrando... ${logData.length} muestras</p>`;
                     }
+                } else if (!isDemoMode && !isConnected) {
+                    // No hacer nada si no hay conexión
                 }
             }, 2000);
         }
 
         function onDisconnected() {
             addConsoleLog("⚠️ Dispositivo desconectado", "error");
-            isConnected = false;
-            document.getElementById('obdLed').className = 'led';
-            document.getElementById('obdStatus').textContent = 'Desconectado';
-            document.getElementById('btLed').className = 'led';
-            document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
-            document.getElementById('connectBtn').style.display = 'inline-block';
-            document.getElementById('disconnectBtn').style.display = 'none';
-            document.getElementById('deviceLed').className = 'led';
-            if (dataInterval) clearInterval(dataInterval);
+            if (!isDemoMode) {
+                isConnected = false;
+                document.getElementById('obdLed').className = 'led';
+                document.getElementById('obdStatus').textContent = 'Desconectado';
+                document.getElementById('btLed').className = 'led';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
+                document.getElementById('connectBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+                document.getElementById('deviceLed').className = 'led';
+                document.getElementById('deviceName').textContent = 'Sin dispositivo';
+                if (dataInterval) clearInterval(dataInterval);
+            }
         }
 
         function disconnectBluetooth() {
-            if (bluetoothDevice && bluetoothDevice.gatt.connected) bluetoothDevice.gatt.disconnect();
+            if (isDemoMode) {
+                isDemoMode = false;
+                isConnected = false;
+                if (dataInterval) clearInterval(dataInterval);
+                document.getElementById('obdLed').className = 'led';
+                document.getElementById('obdStatus').textContent = 'Desconectado';
+                document.getElementById('btLed').className = 'led';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
+                document.getElementById('deviceLed').className = 'led';
+                document.getElementById('deviceName').textContent = 'Sin dispositivo';
+                document.getElementById('connectBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+                document.getElementById('demoBtn').style.display = 'inline-block';
+                addConsoleLog("🎮 Modo Demo desactivado", "info");
+            } else if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            }
             onDisconnected();
         }
 
@@ -1002,7 +1159,7 @@
         function updateAlertsPanel() {
             const container = document.getElementById('activeAlerts');
             container.innerHTML = Object.keys(activeAlerts).length === 0 ? '<p>✅ No hay alertas activas</p>' :
-                Object.values(activeAlerts).map(a => `<div class="alert-item">${a.message}</div>`).join('');
+                Object.values(activeAlerts).map(a => `<div class="alert-item ${a.message.includes('CRÍTICO') ? 'alert-critical' : ''}">${a.message}</div>`).join('');
         }
 
         function updateDashboard() {
@@ -1018,23 +1175,136 @@
                 let value = currentValues[g.pid] || 0;
                 let percent = Math.min(100, Math.max(0, ((value - g.min) / (g.max - g.min)) * 100));
                 let color = percent > 80 ? '#e94560' : (percent > 60 ? '#ffaa00' : '#00ff88');
-                return `<div class="gauge-card"><div>${g.icon} ${g.name}</div><div class="gauge-value" style="color:${color}">${value.toFixed(1)}</div><div class="gauge-unit">${g.unit}</div><div class="gauge-bar"><div class="gauge-fill" style="width:${percent}%"></div></div></div>`;
+                let displayValue = g.pid === 'RPM' ? Math.round(value) : value.toFixed(1);
+                return `<div class="gauge-card"><div>${g.icon} ${g.name}</div><div class="gauge-value" style="color:${color}">${displayValue}</div><div class="gauge-unit">${g.unit}</div><div class="gauge-bar"><div class="gauge-fill" style="width:${percent}%"></div></div></div>`;
             }).join('');
         }
 
-        async function readDTC() { if (!isConnected) { alert('Conecte OBD-II'); return; } await sendCommand("03"); await sleep(500); }
-        function displayDTCList() { document.getElementById('dtcList').innerHTML = currentDTCs.length === 0 ? '<p>✅ No hay códigos</p>' : `<table class="data-table"><table><th>Código</th></tr>${currentDTCs.map(d => `<tr><td>${d}</td></tr>`).join('')}每月`; }
-        async function clearDTC() { if (!isConnected) return; if (confirm('¿Borrar códigos?')) { await sendCommand("04"); await sleep(500); currentDTCs = []; displayDTCList(); addConsoleLog("✅ Códigos borrados", "success"); } }
-        function startPerformanceTest(type) { alert(`Prueba ${type === '0-100' ? '0-100 km/h' : '1/4 milla'} - Acelere`); }
-        function startDataLogging() { if (isLogging) return; isLogging = true; logData = []; document.getElementById('loggingStatus').innerHTML = '<p>📝 Registrando...</p>'; addConsoleLog("📝 Inicio registro", "success"); }
-        function stopDataLogging() { if (isLogging && logData.length) { const csv = convertToCSV(logData); downloadCSV(csv, `obd_log_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`); document.getElementById('loggingStatus').innerHTML = `<p>✅ Guardado: ${logData.length} muestras</p>`; addConsoleLog(`✅ Guardado: ${logData.length} muestras`, "success"); isLogging = false; } else if (isLogging) { isLogging = false; document.getElementById('loggingStatus').innerHTML = '<p>⏹️ Detenido</p>'; } }
-        function convertToCSV(data) { const headers = Object.keys(data[0]); return [headers.join(','), ...data.map(row => headers.map(h => JSON.stringify(row[h] || '')).join(','))].join('\n'); }
-        function downloadCSV(csv, filename) { const blob = new Blob([csv], { type: 'text/csv' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); }
-        function showMaintenanceStatus() { const km = parseInt(document.getElementById('currentKm').value); if (!km) { alert('Ingrese kilometraje'); return; } const intervals = [{ name: 'Cambio de aceite', interval: 10000, icon: '🛢️' }, { name: 'Filtro de aire', interval: 20000, icon: '🌬️' }, { name: 'Bujías', interval: 60000, icon: '⚡' }]; document.getElementById('maintenanceStatus').innerHTML = intervals.map(s => { let nextKm = Math.ceil(km / s.interval) * s.interval; let remaining = nextKm - km; let percent = ((km % s.interval) / s.interval) * 100; return `<div class="maintenance-item"><div>${s.icon} ${s.name}</div><div class="progress-container"><div class="progress-label"><span>Próximo servicio</span><span>${remaining} km</span></div><div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>`; }).join(''); }
-        function startDrivingAnalysis() { alert("Análisis de conducción por 60 segundos."); }
-        async function readECUInfo() { if (!isConnected) return; await sendCommand("ATI"); await sleep(300); document.getElementById('ecuInfo').innerHTML = `<table class="data-table"><tr><th>Parámetro</th><th>Valor</th></tr><tr><td>Vehículo</td><td>${currentMarca} ${currentModelo}</td></tr><tr><td>ELM327</td><td>v1.5</td></tr></table>`; }
-        function loadAlertConfig() { document.getElementById('alertConfig').innerHTML = Object.entries(alertThresholds).map(([pid, t]) => `<div class="maintenance-item"><strong>${pid}</strong><input type="number" id="alert_${pid}_warning" placeholder="Advertencia" value="${t.warning || ''}"><input type="number" id="alert_${pid}_critical" placeholder="Crítico" value="${t.critical || t.critical_max || ''}"></div>`).join(''); }
-        function saveAlertConfig() { for (let pid of Object.keys(alertThresholds)) { let warning = document.getElementById(`alert_${pid}_warning`)?.value; let critical = document.getElementById(`alert_${pid}_critical`)?.value; if (warning) alertThresholds[pid].warning = parseFloat(warning); if (critical) { if (alertThresholds[pid].critical) alertThresholds[pid].critical = parseFloat(critical); if (alertThresholds[pid].critical_max) alertThresholds[pid].critical_max = parseFloat(critical); } } alert('✅ Configuración guardada'); }
+        async function readDTC() { 
+            if (!isConnected) { 
+                alert('⚠️ Conecte un dispositivo OBD-II o active el Modo Demo'); 
+                return; 
+            } 
+            await sendCommand("03"); 
+            await sleep(500);
+            addConsoleLog("📋 Lectura de códigos DTC completada", "info");
+        }
+        
+        function displayDTCList() { 
+            document.getElementById('dtcList').innerHTML = currentDTCs.length === 0 ? '<p>✅ No hay códigos de falla almacenados</p>' : `<table class="data-table"><tr><th>Código</th><th>Descripción</th></tr>${currentDTCs.map(d => `<tr><td>${d}</td><td>Falla detectada - Consultar manual del vehículo</td></tr>`).join('')}</table>`; 
+        }
+        
+        async function clearDTC() { 
+            if (!isConnected) {
+                alert('⚠️ Conecte un dispositivo OBD-II');
+                return;
+            }
+            if (confirm('⚠️ ¿Está seguro de borrar todos los códigos de falla?')) { 
+                await sendCommand("04"); 
+                await sleep(500); 
+                currentDTCs = []; 
+                displayDTCList(); 
+                addConsoleLog("✅ Códigos DTC borrados correctamente", "success"); 
+            } 
+        }
+        
+        function startPerformanceTest(type) { 
+            addConsoleLog(`🏁 Iniciando prueba de rendimiento: ${type === '0-100' ? '0-100 km/h' : '1/4 de milla'}`, "info");
+            alert(`Prueba ${type === '0-100' ? '0-100 km/h' : '1/4 milla'} - Acelere a fondo cuando esté listo`);
+        }
+        
+        function startDataLogging() { 
+            if (isLogging) return; 
+            isLogging = true; 
+            logData = []; 
+            document.getElementById('loggingStatus').innerHTML = '<p>📝 Registrando datos...</p>'; 
+            addConsoleLog("📝 Inicio de registro de datos", "success"); 
+        }
+        
+        function stopDataLogging() { 
+            if (isLogging && logData.length) { 
+                const csv = convertToCSV(logData); 
+                downloadCSV(csv, `obd_log_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`); 
+                document.getElementById('loggingStatus').innerHTML = `<p>✅ Registro guardado: ${logData.length} muestras</p>`; 
+                addConsoleLog(`✅ Registro guardado: ${logData.length} muestras`, "success"); 
+                isLogging = false; 
+            } else if (isLogging) { 
+                isLogging = false; 
+                document.getElementById('loggingStatus').innerHTML = '<p>⏹️ Registro detenido sin datos</p>'; 
+            } else {
+                document.getElementById('loggingStatus').innerHTML = '<p>ℹ️ No hay datos para guardar</p>';
+            }
+        }
+        
+        function convertToCSV(data) { 
+            if (!data || data.length === 0) return "";
+            const headers = Object.keys(data[0]); 
+            return [headers.join(','), ...data.map(row => headers.map(h => JSON.stringify(row[h] || '')).join(','))].join('\n'); 
+        }
+        
+        function downloadCSV(csv, filename) { 
+            if (!csv) return;
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); 
+            const link = document.createElement('a'); 
+            link.href = URL.createObjectURL(blob); 
+            link.download = filename; 
+            link.click(); 
+            URL.revokeObjectURL(link.href);
+        }
+        
+        function showMaintenanceStatus() { 
+            const km = parseInt(document.getElementById('currentKm').value); 
+            if (!km) { 
+                alert('Ingrese el kilometraje actual del vehículo'); 
+                return; 
+            } 
+            const intervals = [
+                { name: 'Cambio de aceite y filtro', interval: 10000, icon: '🛢️', unit: 'km' }, 
+                { name: 'Filtro de aire', interval: 20000, icon: '🌬️', unit: 'km' }, 
+                { name: 'Bujías', interval: 60000, icon: '⚡', unit: 'km' },
+                { name: 'Filtro de combustible', interval: 40000, icon: '⛽', unit: 'km' },
+                { name: 'Líquido de frenos', interval: 50000, icon: '🛑', unit: 'km' }
+            ]; 
+            document.getElementById('maintenanceStatus').innerHTML = intervals.map(s => { 
+                let nextKm = Math.ceil(km / s.interval) * s.interval; 
+                let remaining = nextKm - km; 
+                let percent = ((km % s.interval) / s.interval) * 100; 
+                return `<div class="maintenance-item"><div>${s.icon} ${s.name}</div><div class="progress-container"><div class="progress-label"><span>Próximo servicio</span><span>${remaining} ${s.unit}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>`; 
+            }).join(''); 
+        }
+        
+        function startDrivingAnalysis() { 
+            addConsoleLog("🎯 Iniciando análisis de conducción por 60 segundos", "info");
+            alert("Análisis de conducción iniciado. Conduzca normalmente durante 60 segundos.");
+        }
+        
+        async function readECUInfo() { 
+            if (!isConnected) {
+                alert('⚠️ Conecte un dispositivo OBD-II');
+                return;
+            }
+            await sendCommand("ATI"); 
+            await sleep(300); 
+            document.getElementById('ecuInfo').innerHTML = `<table class="data-table"><tr><th>Parámetro</th><th>Valor</th></tr><tr><td>Vehículo</td><td>${currentMarca} ${currentModelo}</td></tr><tr><td>ELM327</td><td>v1.5 compatible</td></tr><tr><td>Protocolo</td><td>ISO 15765-4 (CAN)</td></tr></table>`; 
+        }
+        
+        function loadAlertConfig() { 
+            document.getElementById('alertConfig').innerHTML = Object.entries(alertThresholds).map(([pid, t]) => `<div class="maintenance-item"><strong>${pid}</strong><div style="display:flex; gap:10px; margin-top:8px;"><input type="number" id="alert_${pid}_warning" placeholder="Advertencia" value="${t.warning || ''}" style="width:50%"><input type="number" id="alert_${pid}_critical" placeholder="Crítico" value="${t.critical || t.critical_max || ''}" style="width:50%"></div><small>Unidad: ${t.unit}</small></div>`).join(''); 
+        }
+        
+        function saveAlertConfig() { 
+            for (let pid of Object.keys(alertThresholds)) { 
+                let warning = document.getElementById(`alert_${pid}_warning`)?.value; 
+                let critical = document.getElementById(`alert_${pid}_critical`)?.value; 
+                if (warning && !isNaN(parseFloat(warning))) alertThresholds[pid].warning = parseFloat(warning); 
+                if (critical && !isNaN(parseFloat(critical))) { 
+                    if (alertThresholds[pid].critical) alertThresholds[pid].critical = parseFloat(critical); 
+                    if (alertThresholds[pid].critical_max) alertThresholds[pid].critical_max = parseFloat(critical); 
+                    if (alertThresholds[pid].critical_min) alertThresholds[pid].critical_min = parseFloat(critical); 
+                } 
+            } 
+            alert('✅ Configuración de alertas guardada correctamente'); 
+        }
 
         // ============================================
         // INICIALIZACIÓN
@@ -1050,6 +1320,8 @@
             });
             loadCommandTabs();
             loadAlertConfig();
+            addConsoleLog("🚀 Aplicación OBD-II inicializada correctamente", "success");
+            addConsoleLog("💡 Si no tiene hardware, active el MODO DEMO para probar la aplicación", "info");
         }
         init();
     </script>
