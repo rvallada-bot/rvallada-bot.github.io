@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>OBD-II Diagnostic Tool Pro - Comandos ELM327</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #0f3460, #1a1a2e);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #e94560;
+        }
+
+        .header h1 { font-size: 1.8rem; margin-bottom: 5px; }
+        .header p { color: #e94560; font-size: 0.9rem; }
+
+        .connection-bar {
+            background: #0f3460;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 12px;
+            border-radius: 20px;
+        }
+
+        .led {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #555;
+            transition: all 0.3s ease;
+        }
+
+        .led.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; animation: pulse 1.5s infinite; }
+        .led.bluetooth { background: #0088ff; box-shadow: 0 0 10px #0088ff; }
+        .led.searching { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; animation: pulse 0.5s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .btn {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            margin: 3px;
+        }
+
+        .btn:hover { background: #ff6b8a; transform: scale(1.02); }
+        .btn-secondary { background: #2a2a4a; }
+        .btn-secondary:hover { background: #3a3a5a; }
+        .btn-danger { background: #ff4444; }
+        .btn-success { background: #00aa55; }
+
+        .container { display: flex; min-height: calc(100vh - 120px); }
+        .sidebar {
+            width: 280px;
+            background: rgba(26, 26, 46, 0.95);
+            border-right: 1px solid #2a2a4a;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .sidebar h3 { color: #e94560; margin-bottom: 15px; border-left: 3px solid #e94560; padding-left: 10px; }
+        
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: #0f0f1a;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+
+        .menu-item:hover { background: #1a1a3a; border-color: #e94560; transform: translateX(5px); }
+        .menu-item.active { background: #e94560; color: white; }
+
+        .main-content { flex: 1; padding: 20px; overflow-y: auto; }
+        .page { display: none; animation: fadeIn 0.3s ease; }
+        .page.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .gauge-card {
+            background: rgba(15, 15, 26, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(233, 69, 96, 0.3);
+        }
+
+        .gauge-value { font-size: 2.5rem; font-weight: bold; margin: 10px 0; }
+        .gauge-unit { font-size: 0.9rem; color: #888; }
+        .gauge-bar { width: 100%; height: 8px; background: #2a2a4a; border-radius: 4px; overflow: hidden; margin-top: 10px; }
+        .gauge-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #e94560); border-radius: 4px; transition: width 0.3s ease; }
+
+        .alerts-panel {
+            background: #0f0f1a;
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 8px;
+            background: rgba(233, 69, 96, 0.1);
+            border-left: 3px solid #e94560;
+        }
+
+        .alert-critical { background: rgba(233, 69, 96, 0.2); border-left-color: #ff0000; }
+
+        input, select {
+            background: #0f0f1a;
+            border: 1px solid #2a2a4a;
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .data-table th, .data-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        .data-table th { color: #e94560; }
+
+        .progress-container { margin: 10px 0; }
+        .progress-label { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .progress-bar { height: 8px; background: #2a2a4a; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #e94560); border-radius: 4px; transition: width 0.3s ease; }
+
+        .maintenance-item {
+            background: #0f0f1a;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #1a1a2e;
+            border-radius: 15px;
+            padding: 25px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .console-log {
+            background: #0a0a0f;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            max-height: 180px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .log-entry { color: #00ff88; margin: 2px 0; border-bottom: 1px solid #1a1a2e; padding: 4px; }
+        .log-error { color: #ff4444; }
+        .log-info { color: #ffaa00; }
+        .log-success { color: #00ff88; }
+
+        /* TABS HORIZONTALES para comandos */
+        .cmd-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #2a2a4a;
+            flex-wrap: wrap;
+        }
+
+        .cmd-tab {
+            padding: 10px 20px;
+            background: #0f0f1a;
+            border: none;
+            border-radius: 10px 10px 0 0;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            color: #888;
+        }
+
+        .cmd-tab:hover {
+            background: #1a1a3a;
+            color: #fff;
+        }
+
+        .cmd-tab.active {
+            background: #e94560;
+            color: white;
+        }
+
+        .cmd-panel {
+            display: none;
+            background: #0f0f1a;
+            border-radius: 0 10px 10px 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .cmd-panel.active {
+            display: block;
+        }
+
+        .cmd-horizontal-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-start;
+        }
+
+        .cmd-card-h {
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .cmd-card-h:hover {
+            border-color: #e94560;
+            transform: translateY(-2px);
+            background: #e94560;
+        }
+
+        .cmd-code-h {
+            font-family: monospace;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #e94560;
+        }
+
+        .cmd-card-h:hover .cmd-code-h {
+            color: white;
+        }
+
+        .cmd-desc-h {
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+        }
+
+        /* Estilos corregidos para la selección de vehículo */
+        .brand-group {
+            margin-bottom: 15px;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .brand-header {
+            background: #e94560;
+            padding: 12px 15px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand-header:hover {
+            background: #ff6b8a;
+        }
+
+        .models-list {
+            display: none;
+            padding: 12px;
+            background: #0f0f1a;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .models-list.show {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .model-chip {
+            background: #2a2a4a;
+            padding: 8px 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            display: inline-block;
+        }
+
+        .model-chip:hover {
+            background: #e94560;
+            transform: scale(1.05);
+        }
+
+        .search-box {
+            margin-bottom: 15px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 25px;
+            background: #0f0f1a;
+            border: 1px solid #e94560;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .selected-vehicle {
+            background: #00aa55;
+            padding: 2px 8px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            .sidebar { width: 100%; display: flex; overflow-x: auto; padding: 10px; }
+            .menu-item { display: inline-flex; margin: 0 5px; }
+            .cmd-tabs { justify-content: center; }
+            .cmd-card-h { min-width: 80px; }
+            .model-chip { padding: 6px 12px; font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚗 OBD-II Diagnostic Tool Pro - Chile</h1>
+        <p>Diagnóstico avanzado | +60 Marcas | Comandos ELM327 organizados por tipo</p>
+    </div>
+
+    <div class="connection-bar">
+        <div class="status-indicator">
+            <div class="status-item"><div class="led" id="obdLed"></div><span id="obdStatus">Desconectado</span></div>
+            <div class="status-item"><div class="led bluetooth" id="btLed"></div><span id="btStatus">Bluetooth: Desconectado</span></div>
+            <div class="status-item"><div class="led" id="deviceLed"></div><span id="deviceName">Sin dispositivo</span></div>
+        </div>
+        <div class="vehicle-info" id="vehicleInfo">🚙 Sin vehículo seleccionado</div>
+        <div>
+            <button class="btn btn-secondary" onclick="showVehicleModal()">🚙 Seleccionar Vehículo</button>
+            <button class="btn" id="connectBtn" onclick="connectBluetooth()">🔍 Conectar Bluetooth</button>
+            <button class="btn btn-danger" id="disconnectBtn" onclick="disconnectBluetooth()" style="display:none">❌ Desconectar</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <h3>📋 Menú Principal</h3>
+            <div class="menu-item active" data-page="dashboard"><span>📊</span><span>Dashboard</span></div>
+            <div class="menu-item" data-page="dtc"><span>🔍</span><span>Códigos DTC</span></div>
+            <div class="menu-item" data-page="performance"><span>🏁</span><span>Rendimiento</span></div>
+            <div class="menu-item" data-page="datalogger"><span>📝</span><span>Data Logger</span></div>
+            <div class="menu-item" data-page="maintenance"><span>🔧</span><span>Mantenimiento</span></div>
+            <div class="menu-item" data-page="driving"><span>🎯</span><span>Análisis Conducción</span></div>
+            <div class="menu-item" data-page="ecu"><span>💻</span><span>Monitoreo ECU</span></div>
+            <div class="menu-item" data-page="alerts"><span>⚠️</span><span>Alertas</span></div>
+            <div class="menu-item" data-page="console"><span>📟</span><span>Consola OBD</span></div>
+        </div>
+
+        <div class="main-content">
+            <div id="dashboard" class="page active">
+                <h2>📊 Dashboard en Tiempo Real</h2>
+                <div class="dashboard-grid" id="dashboardGrid"></div>
+                <div class="alerts-panel"><h3>⚠️ Alertas Activas</h3><div id="activeAlerts"></div></div>
+            </div>
+
+            <div id="dtc" class="page">
+                <h2>🔍 Códigos de Falla (DTC)</h2>
+                <button class="btn" onclick="readDTC()">📖 Leer Códigos</button>
+                <button class="btn btn-danger" onclick="clearDTC()">🗑️ Borrar Códigos</button>
+                <div id="dtcList"></div>
+            </div>
+
+            <div id="performance" class="page">
+                <h2>🏁 Pruebas de Rendimiento</h2>
+                <button class="btn" onclick="startPerformanceTest('0-100')">🏎️ 0-100 km/h</button>
+                <button class="btn" onclick="startPerformanceTest('quarter')">🏁 1/4 de Milla</button>
+                <div id="performanceResult"></div>
+            </div>
+
+            <div id="datalogger" class="page">
+                <h2>📝 Registro de Datos</h2>
+                <button class="btn" onclick="startDataLogging()">▶️ Iniciar Registro</button>
+                <button class="btn btn-secondary" onclick="stopDataLogging()">⏹️ Detener</button>
+                <div id="loggingStatus"></div>
+            </div>
+
+            <div id="maintenance" class="page">
+                <h2>🔧 Mantenimiento Programado</h2>
+                <input type="number" id="currentKm" placeholder="Kilometraje actual">
+                <button class="btn" onclick="showMaintenanceStatus()">Ver Estado</button>
+                <div id="maintenanceStatus"></div>
+            </div>
+
+            <div id="driving" class="page">
+                <h2>🎯 Análisis de Conducción</h2>
+                <button class="btn" onclick="startDrivingAnalysis()">Iniciar Análisis (60s)</button>
+                <div id="drivingResult"></div>
+            </div>
+
+            <div id="ecu" class="page">
+                <h2>💻 Monitoreo de ECU</h2>
+                <button class="btn" onclick="readECUInfo()">Leer Información ECU</button>
+                <div id="ecuInfo"></div>
+            </div>
+
+            <div id="alerts" class="page">
+                <h2>⚙️ Configuración de Alertas</h2>
+                <div id="alertConfig"></div>
+                <button class="btn" onclick="saveAlertConfig()">Guardar Configuración</button>
+            </div>
+
+            <div id="console" class="page">
+                <h2>📟 Consola OBD-II Interactiva</h2>
+                
+                <div class="cmd-tabs" id="cmdTabs"></div>
+                <div id="cmdPanels"></div>
+                
+                <div class="input-group">
+                    <input type="text" id="commandInput" placeholder="Escriba un comando (ej: 010D, ATZ, 010C)" list="commandHistory">
+                    <datalist id="commandHistory"></datalist>
+                    <button class="btn" onclick="sendRawCommand()">📤 Enviar</button>
+                    <button class="btn btn-secondary" onclick="clearConsole()">🗑️ Limpiar</button>
+                </div>
+                
+                <div class="console-log" id="consoleLog">
+                    <div class="log-entry">📟 Consola OBD-II lista</div>
+                    <div class="log-entry">💡 Haga clic en cualquier comando para usarlo</div>
+                    <div class="log-entry">🔌 Conecte un dispositivo Bluetooth para comenzar</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="vehicleModal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 15px; color: #e94560;">🚙 Seleccionar Vehículo</h3>
+            <div class="search-box">
+                <input type="text" id="brandSearch" placeholder="🔍 Buscar marca o modelo..." onkeyup="filterBrandsAndModels()">
+            </div>
+            <div id="brandsContainer" style="max-height: 500px; overflow-y: auto;"></div>
+            <button class="btn btn-secondary" onclick="closeModal()" style="margin-top: 15px; width: 100%;">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // BASE DE DATOS COMPLETA DE VEHÍCULOS
+        // ============================================
+        const VEHICLE_DATABASE = {
+            "ACURA": { "models": ["ILX", "MDX", "RDX", "TLX", "NSX"] },
+            "ALFA ROMEO": { "models": ["GIULIA", "STELVIO", "TONALE"] },
+            "AUDI": { "models": ["A1", "A3", "A4", "A5", "A6", "A7", "A8", "Q2", "Q3", "Q5", "Q7", "Q8", "E-TRON", "RS3", "RS5", "R8"] },
+            "BAIC": { "models": ["BJ20", "BJ40", "X25", "X35", "D20"] },
+            "BENTLEY": { "models": ["CONTINENTAL", "FLYING SPUR", "BENTAYGA"] },
+            "BMW": { "models": ["SERIE 1", "SERIE 2", "SERIE 3", "SERIE 4", "SERIE 5", "SERIE 7", "X1", "X2", "X3", "X4", "X5", "X6", "X7", "Z4", "i3", "i4", "i8", "M2", "M3", "M4", "M5"] },
+            "BYD": { "models": ["F0", "F3", "S2", "S3", "S7", "E6", "M6", "QIN", "TANG", "SONG", "HAN", "DOLPHIN", "SEAL", "ATTO 3", "YUAN"] },
+            "CHANGAN": { "models": ["CS15", "CS35", "CS55", "CS75", "CS95", "EADO", "ALSVIN"] },
+            "CHERY": { "models": ["IQ", "QQ", "ARRIZO 3", "ARRIZO 5", "ARRIZO 7", "TIGGO 2", "TIGGO 4", "TIGGO 5", "TIGGO 7", "TIGGO 8"] },
+            "CHEVROLET": { "models": ["CRUZE", "SAIL", "JOY", "SPARK", "ONIX", "PRISMA", "TRACKER", "CAPTIVA", "EQUINOX", "TRAILBLAZER", "S10", "MONTANA", "CAMARO", "CORVETTE", "BLAZER"] },
+            "CITROEN": { "models": ["C3", "C4", "C4 CACTUS", "C5", "C-ELYSEE", "BERLINGO", "JUMPY"] },
+            "DODGE": { "models": ["ATTITUDE", "JOURNEY", "DURANGO", "GRAND CARAVAN", "CHALLENGER", "CHARGER"] },
+            "DS AUTOMOBILES": { "models": ["DS3", "DS4", "DS5", "DS7", "DS9"] },
+            "FERRARI": { "models": ["F8", "PORTOFINO", "ROMA", "SF90", "296 GTB", "PISTA"] },
+            "FIAT": { "models": ["MOBI", "UNO", "PALIO", "SIENA", "FIORINO", "DOBLO", "STRADA", "TORO", "TIPO", "500", "500X", "ARGO", "CRONOS"] },
+            "FORD": { "models": ["FIESTA", "FOCUS", "MONDEO", "FUSION", "MUSTANG", "RANGER", "EXPLORER", "TERRITORY", "ECOSPORT", "EDGE", "ESCAPE", "TRANSIT", "F-150", "KA", "FIGO"] },
+            "FOTON": { "models": ["TUNLAND", "VIEW", "AUMARK", "FORLAND"] },
+            "GEELY": { "models": ["GC2", "GC6", "EC7", "EMGRAND", "GS", "COOLRAY", "AZKARRA"] },
+            "GENESIS": { "models": ["G70", "G80", "G90", "GV60", "GV70", "GV80"] },
+            "GREAT WALL": { "models": ["POER", "WINGLE", "HOVER", "H6", "M4", "STEED"] },
+            "HAVAL": { "models": ["H2", "H4", "H6", "H8", "H9", "M6", "JOLION", "DAGO", "TANK 300", "TANK 500"] },
+            "HONDA": { "models": ["CIVIC", "ACCORD", "CR-V", "HR-V", "PILOT", "ODYSSEY", "FIT", "CITY", "NSX", "CR-Z", "RIDGELINE", "PASSPORT"] },
+            "HYUNDAI": { "models": ["GRAND I10", "HB20", "HB20S", "ACCENT", "VERNA", "ELANTRA", "SONATA", "AZERA", "GRAND SANTA FE", "SANTA FE", "TUCSON", "CRETA", "KONA", "KONA ELECTRIC", "IONIQ", "IONIQ 5", "IONIQ 6", "SANTA CRUZ"] },
+            "ISUZU": { "models": ["D-MAX", "MU-X", "NMR", "NPR", "NQR"] },
+            "IVECO": { "models": ["DAILY", "TECTOR", "STRALIS", "EUROCARGO"] },
+            "JAC": { "models": ["E-JS1", "E-JS4", "JS2", "JS3", "JS4", "JS6", "SEI4", "SEI5", "SUNRAY", "X200"] },
+            "JAGUAR": { "models": ["XE", "XF", "XJ", "F-PACE", "E-PACE", "I-PACE", "F-TYPE"] },
+            "JEEP": { "models": ["GRAND CHEROKEE", "CHEROKEE", "COMPASS", "RENEGADE", "WRANGLER", "GLADIATOR", "COMMANDER"] },
+            "KIA": { "models": ["MORNING", "PICANTO", "RIO", "K3", "CERATO", "FORTE", "K5", "OPTIMA", "SPORTAGE", "SORENTO", "TELLURIDE", "CARNIVAL", "SOUL", "STINGER", "NIRO", "EV6", "EV9"] },
+            "LAMBORGHINI": { "models": ["HURACAN", "AVENTADOR", "URUS", "REVUELTO"] },
+            "LAND ROVER": { "models": ["EVOQUE", "VELAR", "DISCOVERY", "DISCOVERY SPORT", "DEFENDER", "RANGE ROVER"] },
+            "LORDSHIP": { "models": ["M10", "M20", "V10", "V20", "T6"] },
+            "MAHINDRA": { "models": ["SCORPIO", "XUV500", "THAR", "KUV100", "BOLERO", "MARAZZO"] },
+            "MASERATI": { "models": ["GHIBLI", "QUATTROPORTE", "LEVANTE", "GRECALE", "MC20"] },
+            "MAZDA": { "models": ["2", "3", "6", "CX-3", "CX-30", "CX-5", "CX-7", "CX-9", "MX-5", "BT-50"] },
+            "MERCEDES BENZ": { "models": ["CLASE A", "CLASE B", "CLASE C", "CLASE E", "CLASE S", "GLA", "GLB", "GLC", "GLE", "GLS", "CLA", "CLS", "VITO", "SPRINTER", "G-CLASS", "EQC", "EQS", "AMG GT"] },
+            "MG": { "models": ["MG3", "MG5", "MG6", "MG ZS", "MG HS", "MG RX5", "MG EHS", "MG MARVEL R", "MG4", "MG CYBERSTER"] },
+            "MINI": { "models": ["COOPER", "COOPER S", "CLUBMAN", "COUNTRYMAN", "PACEMAN"] },
+            "MITSUBISHI": { "models": ["SPACE STAR", "MIRAGE", "LANCER", "ASX", "OUTLANDER", "MONTERO", "PAJERO", "L200", "TRITON"] },
+            "NISSAN": { "models": ["VERSA", "SUNNY", "TIIDA", "SENTRA", "SYLPHY", "MAXIMA", "ALTIMA", "QASHQAI", "X-TRAIL", "MURANO", "PATHFINDER", "FRONTIER", "NP300", "NAVARA", "MARCH", "NOTE", "LEAF", "370Z", "GT-R"] },
+            "OPEL": { "models": ["CORSA", "ASTRA", "INSIGNIA", "MOKKA", "CROSSLAND", "GRANDLAND", "COMBO", "ZAFIRA"] },
+            "PEUGEOT": { "models": ["108", "208", "308", "408", "508", "2008", "3008", "5008", "PARTNER", "EXPERT", "BOXER", "RCZ"] },
+            "PORSCHE": { "models": ["911", "CAYMAN", "BOXSTER", "PANAMERA", "CAYENNE", "MACAN", "TAYCAN"] },
+            "RAM": { "models": ["1500", "2500", "3500", "PROMASTER", "700", "1200"] },
+            "RENAULT": { "models": ["KWID", "SANDERO", "LOGAN", "STEPWAY", "MEGANE", "FLUENCE", "KOLEOS", "DOKKER", "MASTER", "KANGOO", "ZOE", "TWINGO"] },
+            "SCANIA": { "models": ["G410", "R420", "S450", "P360", "K360"] },
+            "SMART": { "models": ["FORTWO", "FORFOUR", "EQ FORTWO"] },
+            "SSANGYONG": { "models": ["TIVOLI", "KORANDO", "REXTON", "MUSSO", "CHAIRMAN", "ACTYON"] },
+            "SUBARU": { "models": ["IMPREZA", "WRX", "XV", "CROSSTREK", "FORESTER", "OUTBACK", "LEGACY", "BRZ", "ASCENT"] },
+            "SUZUKI": { "models": ["ALTO", "CELERIO", "SWIFT", "BALENO", "S-CROSS", "VITARA", "GRAND VITARA", "JIMNY", "CARRY", "APV"] },
+            "TATA": { "models": ["TIAGO", "TIGOR", "NEXON", "HARRIER", "SAFARI", "XENON", "ACE", "SUPER ACE"] },
+            "TESLA": { "models": ["MODEL 3", "MODEL S", "MODEL X", "MODEL Y"] },
+            "TOYOTA": { "models": ["YARIS", "ETIOS", "COROLLA", "CAMRY", "PRIUS", "PRIUS C", "RAV4", "HIGHLANDER", "FORTUNER", "SW4", "HILUX", "LAND CRUISER", "PRADO", "86", "SUPRA", "C-HR", "MIRAI"] },
+            "VOLKSWAGEN": { "models": ["GOL", "POLO", "VENTO", "JETTA", "PASSAT", "T-CROSS", "TAOS", "TIGUAN", "TOUAREG", "AMAROK", "SUV", "BEETLE", "GOLF"] },
+            "VOLVO": { "models": ["XC40", "XC60", "XC90", "S60", "S80", "V60", "V90", "C40", "EX30", "EX90"] },
+            "ZNA": { "models": ["A9", "MAGIC", "V5", "V6", "V7"] }
+        };
+
+        // Comandos OBD-II
+        const OBD_COMMANDS_BY_TYPE = {
+            "🔧 AT (Configuración)": [
+                { cmd: "ATZ", desc: "Resetear ELM327" }, { cmd: "ATE0", desc: "Desactivar echo" }, { cmd: "ATL0", desc: "Desactivar linefeeds" },
+                { cmd: "ATH0", desc: "Desactivar headers" }, { cmd: "ATSP0", desc: "Protocolo auto" }, { cmd: "ATRV", desc: "Voltaje vehículo" },
+                { cmd: "ATI", desc: "Versión ELM327" }, { cmd: "ATDP", desc: "Protocolo OBD" }
+            ],
+            "📊 Mode 01 - Datos en vivo": [
+                { cmd: "010C", desc: "RPM motor" }, { cmd: "010D", desc: "Velocidad" }, { cmd: "0105", desc: "Temp refrigerante" },
+                { cmd: "0104", desc: "Carga motor" }, { cmd: "010F", desc: "Temp aire" }, { cmd: "0110", desc: "Flujo MAF" },
+                { cmd: "0111", desc: "Posición acelerador" }, { cmd: "012F", desc: "Nivel combustible" }, { cmd: "0142", desc: "Voltaje batería" }
+            ],
+            "⚠️ Mode 03 - DTC (Fallas)": [
+                { cmd: "03", desc: "Leer códigos DTC" }, { cmd: "04", desc: "Borrar códigos DTC" }, { cmd: "07", desc: "DTC pendientes" }
+            ],
+            "🔬 Mode 02 - Datos congelados": [
+                { cmd: "02", desc: "Datos congelados", example: "02" },
+                { cmd: "0201", desc: "Datos fallo 1", example: "0201" },
+                { cmd: "020C", desc: "RPM en fallo", example: "020C" },
+                { cmd: "020D", desc: "Velocidad en fallo", example: "020D" }
+            ],
+            "🟢 Sensores O2": [
+                { cmd: "0114", desc: "Sensor O2 B1S1", example: "0114" },
+                { cmd: "0115", desc: "Sensor O2 B1S2", example: "0115" },
+                { cmd: "0116", desc: "Sensor O2 B1S3", example: "0116" },
+                { cmd: "0118", desc: "Sensor O2 B1S4", example: "0118" }
+            ],
+            "🏎️ Rendimiento": [
+                { cmd: "010C", desc: "RPM máximos", example: "010C" },
+                { cmd: "010D", desc: "Velocidad máxima", example: "010D" },
+                { cmd: "0111", desc: "Aceleración", example: "0111" },
+                { cmd: "0104", desc: "Carga motor", example: "0104" }
+            ]
+        };
+
+        // ============================================
+        // VARIABLES GLOBALES
+        // ============================================
+        let bluetoothDevice = null;
+        let characteristic = null;
+        let isConnected = false;
+        let currentMarca = "TOYOTA";
+        let currentModelo = "YARIS";
+        let currentDTCs = [];
+        let isLogging = false;
+        let dataInterval = null;
+        let currentValues = { SPEED: 0, RPM: 0, COOLANT_TEMP: 85, THROTTLE_POS: 0, FUEL_LEVEL: 75, BATTERY_VOLTAGE: 12.5 };
+        let activeAlerts = {};
+        let logData = [];
+        let commandHistory = [];
+
+        let alertThresholds = {
+            SPEED: { warning: 120, critical: 160, unit: "km/h" },
+            RPM: { warning: 5000, critical: 6500, unit: "rpm" },
+            COOLANT_TEMP: { min: 70, max: 105, critical_max: 120, unit: "°C" },
+            BATTERY_VOLTAGE: { min: 11.5, max: 14.5, critical_min: 10.5, unit: "V" },
+            FUEL_LEVEL: { min: 15, critical_min: 5, unit: "%" }
+        };
+
+        // ============================================
+        // FUNCIONES DE VEHÍCULO (CORREGIDAS)
+        // ============================================
+        function showVehicleModal() {
+            document.getElementById('vehicleModal').style.display = 'flex';
+            loadBrandsList();
+        }
+
+        function closeModal() {
+            document.getElementById('vehicleModal').style.display = 'none';
+        }
+
+        function loadBrandsList() {
+            const container = document.getElementById('brandsContainer');
+            container.innerHTML = '';
+            
+            // Ordenar marcas alfabéticamente
+            const sortedBrands = Object.keys(VEHICLE_DATABASE).sort();
+            
+            for (const brand of sortedBrands) {
+                const models = VEHICLE_DATABASE[brand].models;
+                
+                const group = document.createElement('div');
+                group.className = 'brand-group';
+                group.setAttribute('data-brand', brand);
+                
+                // Header de la marca
+                const header = document.createElement('div');
+                header.className = 'brand-header';
+                header.innerHTML = `🚗 ${brand} <span style="font-size: 0.8rem;">▼</span>`;
+                header.onclick = (function(b) {
+                    return function() { toggleBrand(b); };
+                })(brand);
+                
+                // Contenedor de modelos (chips)
+                const modelsContainer = document.createElement('div');
+                modelsContainer.className = 'models-list';
+                modelsContainer.id = `brand-models-${brand.replace(/\s/g, '-')}`;
+                
+                // Crear chips para cada modelo
+                models.forEach(model => {
+                    const chip = document.createElement('span');
+                    chip.className = 'model-chip';
+                    chip.textContent = model;
+                    chip.onclick = (function(marca, modelo) {
+                        return function() { selectVehicleModel(marca, modelo); };
+                    })(brand, model);
+                    modelsContainer.appendChild(chip);
+                });
+                
+                group.appendChild(header);
+                group.appendChild(modelsContainer);
+                container.appendChild(group);
+            }
+        }
+
+        function toggleBrand(brand) {
+            const modelsContainer = document.getElementById(`brand-models-${brand.replace(/\s/g, '-')}`);
+            if (modelsContainer) {
+                modelsContainer.classList.toggle('show');
+            }
+        }
+
+        function filterBrandsAndModels() {
+            const searchTerm = document.getElementById('brandSearch').value.toLowerCase();
+            const groups = document.querySelectorAll('.brand-group');
+            
+            groups.forEach(group => {
+                const brandName = group.getAttribute('data-brand').toLowerCase();
+                const models = group.querySelectorAll('.model-chip');
+                let hasMatch = false;
+                
+                if (brandName.includes(searchTerm)) {
+                    group.style.display = 'block';
+                    const modelsContainer = group.querySelector('.models-list');
+                    if (modelsContainer) modelsContainer.classList.add('show');
+                    hasMatch = true;
+                } else {
+                    models.forEach(model => {
+                        const modelName = model.textContent.toLowerCase();
+                        if (modelName.includes(searchTerm)) {
+                            hasMatch = true;
+                        }
+                    });
+                    group.style.display = hasMatch ? 'block' : 'none';
+                    
+                    if (hasMatch) {
+                        const modelsContainer = group.querySelector('.models-list');
+                        if (modelsContainer) modelsContainer.classList.add('show');
+                    }
+                }
+            });
+        }
+
+        function selectVehicleModel(marca, modelo) {
+            currentMarca = marca;
+            currentModelo = modelo;
+            document.getElementById('vehicleInfo').innerHTML = `🚙 ${marca} ${modelo}`;
+            closeModal();
+            addConsoleLog(`✅ Vehículo seleccionado: ${marca} ${modelo}`, "success");
+        }
+
+        // ============================================
+        // CARGAR TABS Y COMANDOS
+        // ============================================
+        function loadCommandTabs() {
+            const tabsContainer = document.getElementById('cmdTabs');
+            const panelsContainer = document.getElementById('cmdPanels');
+            
+            tabsContainer.innerHTML = '';
+            panelsContainer.innerHTML = '';
+            
+            let firstTab = true;
+            for (const [category, commands] of Object.entries(OBD_COMMANDS_BY_TYPE)) {
+                const tab = document.createElement('button');
+                tab.className = 'cmd-tab' + (firstTab ? ' active' : '');
+                tab.textContent = category;
+                tab.onclick = () => {
+                    document.querySelectorAll('.cmd-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.cmd-panel').forEach(p => p.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(`panel-${category.replace(/[^a-zA-Z0-9]/g, '-')}`).classList.add('active');
+                };
+                tabsContainer.appendChild(tab);
+                
+                const panel = document.createElement('div');
+                panel.className = 'cmd-panel' + (firstTab ? ' active' : '');
+                panel.id = `panel-${category.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                
+                const cmdList = document.createElement('div');
+                cmdList.className = 'cmd-horizontal-list';
+                
+                commands.forEach(cmdInfo => {
+                    const cmdCard = document.createElement('div');
+                    cmdCard.className = 'cmd-card-h';
+                    cmdCard.onclick = () => {
+                        document.getElementById('commandInput').value = cmdInfo.cmd;
+                        sendRawCommand();
+                    };
+                    cmdCard.innerHTML = `
+                        <div class="cmd-code-h">${cmdInfo.cmd}</div>
+                        <div class="cmd-desc-h">${cmdInfo.desc}</div>
+                    `;
+                    cmdList.appendChild(cmdCard);
+                });
+                
+                panel.appendChild(cmdList);
+                panelsContainer.appendChild(panel);
+                firstTab = false;
+            }
+        }
+
+        // ============================================
+        // WEB BLUETOOTH API
+        // ============================================
+        async function connectBluetooth() {
+            try {
+                if (!navigator.bluetooth) {
+                    addConsoleLog("❌ Web Bluetooth no es compatible. Use Chrome/Edge/Opera.", "error");
+                    alert("Web Bluetooth no es compatible. Use Chrome, Edge u Opera.");
+                    return;
+                }
+                addConsoleLog("🔍 Buscando dispositivos ELM327...", "info");
+                document.getElementById('btLed').className = 'led searching';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Buscando...';
+
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { namePrefix: "OBD" }, { namePrefix: "ELM" }, { namePrefix: "CAR" },
+                        { namePrefix: "V-Link" }, { namePrefix: "OBDII" }, { namePrefix: "ELM327" }
+                    ],
+                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+                });
+
+                addConsoleLog(`✅ Dispositivo: ${bluetoothDevice.name || 'ELM327'}`, "success");
+                document.getElementById('deviceName').textContent = bluetoothDevice.name || 'ELM327';
+                document.getElementById('deviceLed').className = 'led connected';
+
+                bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                const server = await bluetoothDevice.gatt.connect();
+                addConsoleLog("🔗 Conectado al servidor GATT", "success");
+                
+                const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', handleDataReceived);
+                
+                isConnected = true;
+                document.getElementById('obdLed').className = 'led connected';
+                document.getElementById('obdStatus').textContent = 'Conectado';
+                document.getElementById('btLed').className = 'led bluetooth';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Conectado';
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('disconnectBtn').style.display = 'inline-block';
+                
+                addConsoleLog("🎉 Conexión exitosa! Inicializando ELM327...", "success");
+                await initializeELM327();
+                startDataPolling();
+            } catch (error) {
+                addConsoleLog(`❌ Error: ${error.message}`, "error");
+                document.getElementById('btLed').className = 'led bluetooth';
+                document.getElementById('btStatus').textContent = 'Bluetooth: Error';
+            }
+        }
+
+        async function initializeELM327() {
+            await sendCommand("ATZ");
+            await sleep(500);
+            await sendCommand("ATE0");
+            await sleep(200);
+            await sendCommand("ATL0");
+            await sleep(200);
+            await sendCommand("ATH0");
+            await sleep(200);
+            await sendCommand("ATSP0");
+            await sleep(500);
+            addConsoleLog("✅ ELM327 inicializado", "success");
+        }
+
+        async function sendCommand(cmd) {
+            if (!characteristic) return null;
+            try {
+                const encoder = new TextEncoder();
+                await characteristic.writeValue(encoder.encode(cmd + "\r"));
+                addConsoleLog(`📤 Enviado: ${cmd}`, "info");
+                return true;
+            } catch (error) {
+                addConsoleLog(`❌ Error: ${error.message}`, "error");
+                return false;
+            }
+        }
+
+        async function sendRawCommand() {
+            const cmd = document.getElementById('commandInput').value.trim();
+            if (!cmd) return;
+            
+            if (!commandHistory.includes(cmd)) {
+                commandHistory.unshift(cmd);
+                if (commandHistory.length > 20) commandHistory.pop();
+                const datalist = document.getElementById('commandHistory');
+                datalist.innerHTML = commandHistory.map(c => `<option value="${c}">`).join('');
+            }
+            
+            await sendCommand(cmd);
+            document.getElementById('commandInput').value = '';
+        }
+
+        function handleDataReceived(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder();
+            const response = decoder.decode(value);
+            const cleanResponse = response.trim();
+            addConsoleLog(`📥 Recibido: ${cleanResponse}`, "success");
+            
+            if (cleanResponse.includes("41 0D")) {
+                const speed = parseInt(cleanResponse.match(/41 0D ([0-9A-F]{2})/)?.[1], 16);
+                if (!isNaN(speed)) currentValues.SPEED = speed;
+            } else if (cleanResponse.includes("41 0C")) {
+                const rpmHex = cleanResponse.match(/41 0C ([0-9A-F]{2}) ([0-9A-F]{2})/);
+                if (rpmHex) currentValues.RPM = (parseInt(rpmHex[1], 16) * 256 + parseInt(rpmHex[2], 16)) / 4;
+            } else if (cleanResponse.includes("41 05")) {
+                const temp = parseInt(cleanResponse.match(/41 05 ([0-9A-F]{2})/)?.[1], 16) - 40;
+                if (!isNaN(temp)) currentValues.COOLANT_TEMP = temp;
+            }
+        }
+
+        async function startDataPolling() {
+            if (dataInterval) clearInterval(dataInterval);
+            dataInterval = setInterval(async () => {
+                if (isConnected && characteristic) {
+                    const commands = { SPEED: "010D", RPM: "010C", COOLANT_TEMP: "0105", THROTTLE_POS: "0111", FUEL_LEVEL: "012F" };
+                    for (const [key, cmd] of Object.entries(commands)) {
+                        await sendCommand(cmd);
+                        await sleep(80);
+                    }
+                    checkAlerts();
+                    updateDashboard();
+                    if (isLogging) { 
+                        logData.push({ timestamp: new Date().toISOString(), ...currentValues }); 
+                        document.getElementById('loggingStatus').innerHTML = `<p>📝 Registrando... ${logData.length} muestras</p>`;
+                    }
+                }
+            }, 2000);
+        }
+
+        function onDisconnected() {
+            addConsoleLog("⚠️ Dispositivo desconectado", "error");
+            isConnected = false;
+            document.getElementById('obdLed').className = 'led';
+            document.getElementById('obdStatus').textContent = 'Desconectado';
+            document.getElementById('btLed').className = 'led';
+            document.getElementById('btStatus').textContent = 'Bluetooth: Desconectado';
+            document.getElementById('connectBtn').style.display = 'inline-block';
+            document.getElementById('disconnectBtn').style.display = 'none';
+            document.getElementById('deviceLed').className = 'led';
+            if (dataInterval) clearInterval(dataInterval);
+        }
+
+        function disconnectBluetooth() {
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) bluetoothDevice.gatt.disconnect();
+            onDisconnected();
+        }
+
+        function addConsoleLog(message, type = "info") {
+            const consoleDiv = document.getElementById('consoleLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function clearConsole() { 
+            document.getElementById('consoleLog').innerHTML = '<div class="log-entry">📟 Consola limpiada</div>';
+        }
+        
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+        // ============================================
+        // FUNCIONES DE LA APLICACIÓN
+        // ============================================
+        function checkAlerts() {
+            for (let [pid, value] of Object.entries(currentValues)) {
+                if (alertThresholds[pid]) {
+                    let t = alertThresholds[pid];
+                    let alertMsg = null;
+                    if (t.critical_min && value < t.critical_min) alertMsg = `🔴 CRÍTICO! ${pid}: ${value.toFixed(1)} ${t.unit}`;
+                    else if (t.min && value < t.min) alertMsg = `⚠️ ADVERTENCIA: ${pid} bajo: ${value.toFixed(1)} ${t.unit}`;
+                    else if (t.critical_max && value > t.critical_max) alertMsg = `🔴 CRÍTICO! ${pid} alto: ${value.toFixed(1)} ${t.unit}`;
+                    else if (t.max && value > t.max) alertMsg = `⚠️ ADVERTENCIA: ${pid} alto: ${value.toFixed(1)} ${t.unit}`;
+                    else if (t.warning && value > t.warning) alertMsg = `⚠️ EXCESO VELOCIDAD: ${value.toFixed(0)} ${t.unit}`;
+                    
+                    if (alertMsg && (!activeAlerts[pid] || (Date.now() - activeAlerts[pid].timestamp) > 10000)) {
+                        activeAlerts[pid] = { message: alertMsg, timestamp: Date.now() };
+                        updateAlertsPanel();
+                        addConsoleLog(alertMsg, "error");
+                    } else if (!alertMsg && activeAlerts[pid]) delete activeAlerts[pid];
+                }
+            }
+        }
+
+        function updateAlertsPanel() {
+            const container = document.getElementById('activeAlerts');
+            container.innerHTML = Object.keys(activeAlerts).length === 0 ? '<p>✅ No hay alertas activas</p>' :
+                Object.values(activeAlerts).map(a => `<div class="alert-item">${a.message}</div>`).join('');
+        }
+
+        function updateDashboard() {
+            const gauges = [
+                { pid: 'SPEED', name: 'Velocidad', unit: 'km/h', min: 0, max: 200, icon: '🏎️' },
+                { pid: 'RPM', name: 'RPM', unit: 'rpm', min: 0, max: 8000, icon: '⚡' },
+                { pid: 'COOLANT_TEMP', name: 'Temp Motor', unit: '°C', min: 0, max: 130, icon: '🌡️' },
+                { pid: 'THROTTLE_POS', name: 'Acelerador', unit: '%', min: 0, max: 100, icon: '🎛️' },
+                { pid: 'FUEL_LEVEL', name: 'Combustible', unit: '%', min: 0, max: 100, icon: '⛽' },
+                { pid: 'BATTERY_VOLTAGE', name: 'Batería', unit: 'V', min: 10, max: 15, icon: '🔋' }
+            ];
+            document.getElementById('dashboardGrid').innerHTML = gauges.map(g => {
+                let value = currentValues[g.pid] || 0;
+                let percent = Math.min(100, Math.max(0, ((value - g.min) / (g.max - g.min)) * 100));
+                let color = percent > 80 ? '#e94560' : (percent > 60 ? '#ffaa00' : '#00ff88');
+                return `<div class="gauge-card"><div>${g.icon} ${g.name}</div><div class="gauge-value" style="color:${color}">${value.toFixed(1)}</div><div class="gauge-unit">${g.unit}</div><div class="gauge-bar"><div class="gauge-fill" style="width:${percent}%"></div></div></div>`;
+            }).join('');
+        }
+
+        async function readDTC() { if (!isConnected) { alert('Conecte OBD-II'); return; } await sendCommand("03"); await sleep(500); }
+        function displayDTCList() { document.getElementById('dtcList').innerHTML = currentDTCs.length === 0 ? '<p>✅ No hay códigos</p>' : `<table class="data-table"><table><th>Código</th></tr>${currentDTCs.map(d => `<tr><td>${d}</td></tr>`).join('')}每月`; }
+        async function clearDTC() { if (!isConnected) return; if (confirm('¿Borrar códigos?')) { await sendCommand("04"); await sleep(500); currentDTCs = []; displayDTCList(); addConsoleLog("✅ Códigos borrados", "success"); } }
+        function startPerformanceTest(type) { alert(`Prueba ${type === '0-100' ? '0-100 km/h' : '1/4 milla'} - Acelere`); }
+        function startDataLogging() { if (isLogging) return; isLogging = true; logData = []; document.getElementById('loggingStatus').innerHTML = '<p>📝 Registrando...</p>'; addConsoleLog("📝 Inicio registro", "success"); }
+        function stopDataLogging() { if (isLogging && logData.length) { const csv = convertToCSV(logData); downloadCSV(csv, `obd_log_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`); document.getElementById('loggingStatus').innerHTML = `<p>✅ Guardado: ${logData.length} muestras</p>`; addConsoleLog(`✅ Guardado: ${logData.length} muestras`, "success"); isLogging = false; } else if (isLogging) { isLogging = false; document.getElementById('loggingStatus').innerHTML = '<p>⏹️ Detenido</p>'; } }
+        function convertToCSV(data) { const headers = Object.keys(data[0]); return [headers.join(','), ...data.map(row => headers.map(h => JSON.stringify(row[h] || '')).join(','))].join('\n'); }
+        function downloadCSV(csv, filename) { const blob = new Blob([csv], { type: 'text/csv' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); }
+        function showMaintenanceStatus() { const km = parseInt(document.getElementById('currentKm').value); if (!km) { alert('Ingrese kilometraje'); return; } const intervals = [{ name: 'Cambio de aceite', interval: 10000, icon: '🛢️' }, { name: 'Filtro de aire', interval: 20000, icon: '🌬️' }, { name: 'Bujías', interval: 60000, icon: '⚡' }]; document.getElementById('maintenanceStatus').innerHTML = intervals.map(s => { let nextKm = Math.ceil(km / s.interval) * s.interval; let remaining = nextKm - km; let percent = ((km % s.interval) / s.interval) * 100; return `<div class="maintenance-item"><div>${s.icon} ${s.name}</div><div class="progress-container"><div class="progress-label"><span>Próximo servicio</span><span>${remaining} km</span></div><div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>`; }).join(''); }
+        function startDrivingAnalysis() { alert("Análisis de conducción por 60 segundos."); }
+        async function readECUInfo() { if (!isConnected) return; await sendCommand("ATI"); await sleep(300); document.getElementById('ecuInfo').innerHTML = `<table class="data-table"><tr><th>Parámetro</th><th>Valor</th></tr><tr><td>Vehículo</td><td>${currentMarca} ${currentModelo}</td></tr><tr><td>ELM327</td><td>v1.5</td></tr></table>`; }
+        function loadAlertConfig() { document.getElementById('alertConfig').innerHTML = Object.entries(alertThresholds).map(([pid, t]) => `<div class="maintenance-item"><strong>${pid}</strong><input type="number" id="alert_${pid}_warning" placeholder="Advertencia" value="${t.warning || ''}"><input type="number" id="alert_${pid}_critical" placeholder="Crítico" value="${t.critical || t.critical_max || ''}"></div>`).join(''); }
+        function saveAlertConfig() { for (let pid of Object.keys(alertThresholds)) { let warning = document.getElementById(`alert_${pid}_warning`)?.value; let critical = document.getElementById(`alert_${pid}_critical`)?.value; if (warning) alertThresholds[pid].warning = parseFloat(warning); if (critical) { if (alertThresholds[pid].critical) alertThresholds[pid].critical = parseFloat(critical); if (alertThresholds[pid].critical_max) alertThresholds[pid].critical_max = parseFloat(critical); } } alert('✅ Configuración guardada'); }
+
+        // ============================================
+        // INICIALIZACIÓN
+        // ============================================
+        function init() {
+            document.querySelectorAll('.menu-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+                    this.classList.add('active');
+                    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                    document.getElementById(this.dataset.page).classList.add('active');
+                });
+            });
+            loadCommandTabs();
+            loadAlertConfig();
+        }
+        init();
+    </script>
+</body>
+</html>
