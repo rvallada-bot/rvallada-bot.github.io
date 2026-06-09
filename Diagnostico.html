@@ -892,14 +892,15 @@
                 document.getElementById('btStatus').textContent = 'Bluetooth: Buscando...';
 
                 // Intento con filtros más amplios
-                bluetoothDevice = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [
-                        '0000ffe0-0000-1000-8000-00805f9b34fb',
-                        '0000180a-0000-1000-8000-00805f9b34fb',
-                        '0000180f-0000-1000-8000-00805f9b34fb'
-                    ]
-                });
+				bluetoothDevice = await navigator.bluetooth.requestDevice({
+					filters: [
+						{ namePrefix: 'OBD' },
+						{ namePrefix: 'ELM' },
+						{ namePrefix: 'V-LINK' },
+						{ services: ['0000ffe0-0000-1000-8000-00805f9b34fb'] } // El servicio serial más común en BLE
+					],
+					optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+				});
 
                 if (!bluetoothDevice) throw new Error("No se seleccionó ningún dispositivo");
 
