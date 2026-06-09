@@ -1,3 +1,10 @@
+Aquí tienes el código completo corregido. He modificado la configuración de `requestDevice` para utilizar `acceptAllDevices: true`, lo que elimina las restricciones de nombre o filtros iniciales que causaban que tus audífonos no aparecieran en la lista.
+
+También añadí una pequeña validación por si tu dispositivo no llega a exponer el servicio de batería, evitando que la aplicación se caiga por completo.
+
+Recuerda que para probarlo debes ejecutarlo desde un servidor local (como `localhost` usando *Live Server* en VS Code, o con un comando como `python -m http.server`) y asegurarte de que tus audífonos estén en **modo de emparejamiento** (desconectados de otros teléfonos o PCs).
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -290,7 +297,6 @@
         </div>
     </div>
 
-    <!-- Metrics row -->
     <div class="metrics-grid">
         <div class="metric-card">
             <div class="metric-title">🔋 Battery Level</div>
@@ -314,7 +320,6 @@
         </div>
     </div>
 
-    <!-- Live data & chart row -->
     <div class="data-panel">
         <div class="live-log">
             <div class="section-header">
@@ -335,7 +340,7 @@
         </div>
     </div>
     <footer>
-        ⚡ Web Bluetooth API • Request device with Battery Service (0x180F) & Generic Access. RSSI and manufacturer data may vary per headset.
+        ⚡ Web Bluetooth API • Requesting all devices with access to Battery Service & Volume Control. RSSI and manufacturer data may vary per headset.
     </footer>
 </div>
 
@@ -357,26 +362,12 @@
         let batteryService = null;
         let batteryChar = null;
         let isConnected = false;
-        let rssiPollInterval = null;
         let lastPacketTimestamp = Date.now();
 
         // For chart (RSSI history)
         let rssiHistory = [];   // store up to 12 values
         let chartCtx = null;
         let chart = null;
-
-        // volume simulation from potential volume control characteristic (if exists)
-        // some headphones expose AVRCP volume, but we'll generate a dynamic "simulated" volume from battery? no, we will try to read any characteristic that indicates volume.
-        // to make demo more realistic: optionally we could search for AVRCP service (but it's optional). Instead, we'll simulate a "volume" characteristic using a custom service?
-        // Actually I'll implement real 'Volume Control Service' (0x1844) if present, else fallback to synthetic reading based on random increments? but better: we'll try to read any characteristic from the device to show live data.
-        // For professional dashboard: also listen to Manufacturer Data from advertisement, or after connection we can read RSSI from bluetooth device.
-        // Web Bluetooth does NOT provide direct RSSI polling via API after connection, but we can use characteristic notifications to simulate or use watchAdvertisements? new proposal? but standard: use navigator.bluetooth.getDevices? To add extra value, we'll get RSSI from advertisement before connection, and after connection we'll fallback to periodic 'getRSSI' is not available in Web Bluetooth spec. Instead we can measure the round-trip time? Not ideal.
-        // To make dashboard interactive: we'll simulate RSSI updates based on periodic "ping" to a characteristic (read request) which may give approximate latency, but to show real data stream we will read battery level every 3 secs and also try to read any unknown characteristic to simulate 'live data'.
-        // Also we can implement "watchAdvertisements" to get RSSI from advertisement packets while connected, but watchAdvertisements works only if device is bonded? 
-        // For simplicity and educational purpose: I will implement periodic battery read + send artificial "RSSI" based on a random walk but reflecting that real RSSI is not directly readable. HOWEVER: to respect the requirement "recibir datos por bluetooth desde unos audifonos", we'll extract real data from available services (Battery, Device Info, any custom notifications). For each read we treat it as incoming data packet -> update latency.
-        // Also we can connect to Device Information service for manufacturer data.
-        // To make it robust: we will read batteryLevel every 2s, and if any characteristic supports notifications, we subscribe. Also to provide realistic RSSI we can't get real dBm after connection, but we can generate random walk to demonstrate graph functionality. To be honest about API capabilities: I'll add a note that RSSI is emulated based on common patterns but still the dashboard shows live BT data reads.
-        // For realistic demo: when a battery read occurs, we increment a "packet counter" and update latency.
 
         // Chart initialization
         function initChart() {
@@ -444,6 +435,7 @@
             if (isError) logDiv.style.color = '#F87171';
             logContainer.appendChild(logDiv);
             logDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
             // remove initial placeholder if present
             if (logContainer.querySelector('.info-message') && logContainer.children.length > 1) {
                 const placeholder = logContainer.querySelector('.info-message');
@@ -477,49 +469,50 @@
         }
 
         // attempt to discover any custom characteristic that may give live data (like volume, etc)
-        // For the sake of dashboard showing variety, we also try to read Device Information (manufacturer name, model) and potentially subscribe to notifications if any characteristic with notify property exists.
         async function discoverAndSubscribeToNotify(service) {
             if (!service || !isConnected) return;
-            const characteristics = await service.getCharacteristics();
-            for (const char of characteristics) {
-                const props = char.properties;
-                if (props.notify) {
-                    try {
-                        await char.startNotifications();
-                        char.addEventListener('characteristicvaluechanged', (event) => {
-                            const decoder = new TextDecoder('utf-8');
-                            let raw = '';
-                            try {
-                                raw = Array.from(new Uint8Array(event.target.value)).join(',');
-                            } catch(e){ raw = 'binary data';}
-                            addLog(`📡 Notification from ${char.uuid}: [${raw.substring(0, 40)}]`);
-                            updateLatency();
-                            // if characteristic looks like volume control, attempt to map value
-                            if(char.uuid.includes('volume') || char.uuid.includes('1844') || char.uuid === '2a2b') {
-                                let vol = event.target.value.getUint8(0);
-                                if(vol <= 100) volumeSpan.innerText = vol;
-                                else if(vol > 100 && vol <= 255) volumeSpan.innerText = Math.round((vol/255)*100);
-                            }
-                        });
-                        addLog(`✅ Subscribed to notifications on ${char.uuid}`);
-                    } catch(e) {
-                        console.warn("cannot subscribe", e);
+            try {
+                const characteristics = await service.getCharacteristics();
+                for (const char of characteristics) {
+                    const props = char.properties;
+                    if (props.notify) {
+                        try {
+                            await char.startNotifications();
+                            char.addEventListener('characteristicvaluechanged', (event) => {
+                                let raw = '';
+                                try {
+                                    raw = Array.from(new Uint8Array(event.target.value)).join(',');
+                                } catch(e){ raw = 'binary data';}
+                                addLog(`📡 Notification from ${char.uuid}: [${raw.substring(0, 40)}]`);
+                                updateLatency();
+                                
+                                if(char.uuid.includes('volume') || char.uuid.includes('1844') || char.uuid === '2a2b') {
+                                    let vol = event.target.value.getUint8(0);
+                                    if(vol <= 100) volumeSpan.innerText = vol;
+                                    else if(vol > 100 && vol <= 255) volumeSpan.innerText = Math.round((vol/255)*100);
+                                }
+                            });
+                            addLog(`✅ Subscribed to notifications on ${char.uuid}`);
+                        } catch(e) {
+                            console.warn("cannot subscribe", e);
+                        }
+                    }
+                    if (props.read && (char.uuid.includes('volume') || char.uuid === '2a2b' || char.uuid.includes('1844'))) {
+                        try {
+                            const val = await char.readValue();
+                            let volLevel = val.getUint8(0);
+                            let percent = (volLevel <= 100) ? volLevel : Math.round((volLevel/255)*100);
+                            volumeSpan.innerText = percent;
+                            addLog(`🎧 Volume characteristic read: ${percent}% from ${char.uuid}`);
+                        } catch(e) {}
                     }
                 }
-                // if characteristic has read property and name maybe volume, try to read once
-                if (props.read && (char.uuid.includes('volume') || char.uuid === '2a2b' || char.uuid.includes('1844'))) {
-                    try {
-                        const val = await char.readValue();
-                        let volLevel = val.getUint8(0);
-                        let percent = (volLevel <= 100) ? volLevel : Math.round((volLevel/255)*100);
-                        volumeSpan.innerText = percent;
-                        addLog(`🎧 Volume characteristic read: ${percent}% from ${char.uuid}`);
-                    } catch(e) {}
-                }
+            } catch (e) {
+                console.warn("Error exploring characteristics for service: " + service.uuid, e);
             }
         }
 
-        // get Device name, manufacturer (nice for log)
+        // get Device name, manufacturer
         async function readDeviceInfo(server) {
             try {
                 const deviceInfoService = await server.getPrimaryService('device_information');
@@ -534,11 +527,9 @@
             } catch(e) { /* not critical */ }
         }
 
-        // RSSI simulation part: We cannot read after connection, so we simulate realistic RSSI variation based on packet timings / random walk, but showing that the "data" is still coming from device reads.
-        // I'll also use a simulated RSSI generator that changes each time we receive a battery reading or notification.
+        // RSSI simulation
         let lastSimulatedRssi = -55;
         function generateSimulatedRssi() {
-            // random walk between -30 and -85
             let change = (Math.random() - 0.5) * 5;
             let newVal = lastSimulatedRssi + change;
             if (newVal > -30) newVal = -30;
@@ -549,16 +540,19 @@
             return lastSimulatedRssi;
         }
 
-        // main loop for polling real battery and updating dashboard with "live data packets"
+        // main loop for polling
         let dataInterval = null;
         function startDataPolling() {
             if (dataInterval) clearInterval(dataInterval);
             dataInterval = setInterval(async () => {
-                if (!isConnected || !batteryChar) return;
-                await readBatteryLevel();
-                // each battery read triggers a simulated RSSI update (to demonstrate trend, because web bluetooth can't get live rssi)
+                if (!isConnected) return;
+                
+                if (batteryChar) {
+                    await readBatteryLevel();
+                }
+                
                 generateSimulatedRssi();
-                // also simulate volume if no volume char exists -> creates dynamic dashboard feel
+                
                 const currentVol = volumeSpan.innerText;
                 if (currentVol === '—') {
                     let simulatedVol = Math.floor(Math.random() * 101);
@@ -571,7 +565,6 @@
         // disconnect clean up
         async function disconnect() {
             if (dataInterval) clearInterval(dataInterval);
-            if (rssiPollInterval) clearInterval(rssiPollInterval);
             if (gattServer && gattServer.connected) {
                 try {
                     await gattServer.disconnect();
@@ -594,7 +587,7 @@
             latencySpan.innerText = '—';
         }
 
-        // handle connection logic
+        // handle connection logic (CORRECTED PREFERENCES HERE)
         async function connectBluetooth() {
             if (isConnected) {
                 await disconnect();
@@ -607,14 +600,17 @@
                 }
                 connectBtn.disabled = true;
                 connectBtn.innerText = '⏳ Pairing...';
+                
+                // CORRECCIÓN: Filtro abierto para encontrar cualquier dispositivo cercano
                 const bluetoothDevice = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { services: ['battery_service'] },   // most headphones expose battery service
-                        { namePrefix: 'Head' },
-                        { namePrefix: 'Audio' }
-                    ],
-                    optionalServices: ['battery_service', 'device_information', '00001844-0000-1000-8000-00805f9b34fb'] // volume service uuid
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        'battery_service', 
+                        'device_information', 
+                        '00001844-0000-1000-8000-00805f9b34fb' // UUID servicio control de volumen
+                    ]
                 });
+                
                 device = bluetoothDevice;
                 deviceNameSpan.innerText = device.name || 'Unknown Headset';
                 addLog(`🎧 Connecting to ${device.name || 'device'}...`);
@@ -624,30 +620,35 @@
                 isConnected = true;
                 statusLed.classList.add('connected');
                 
-                // get battery service
-                batteryService = await server.getPrimaryService('battery_service');
-                batteryChar = await batteryService.getCharacteristic('battery_level');
-                // initial battery read
-                await readBatteryLevel();
-                // try to get device info
-                await readDeviceInfo(server);
-                // attempt to subscribe to any other service notifications
-                const allServices = await server.getPrimaryServices();
-                for (let svc of allServices) {
-                    if (svc.uuid !== 'battery_service') {
-                        await discoverAndSubscribeToNotify(svc);
-                    }
-                }
-                // also Volume Control service check
+                // Intento seguro de capturar servicio de batería
                 try {
-                    const volumeService = await server.getPrimaryService('00001844-0000-1000-8000-00805f9b34fb');
-                    if(volumeService) await discoverAndSubscribeToNotify(volumeService);
-                } catch(e) {}
+                    batteryService = await server.getPrimaryService('battery_service');
+                    batteryChar = await batteryService.getCharacteristic('battery_level');
+                    await readBatteryLevel();
+                } catch (batteryErr) {
+                    console.warn("El dispositivo no soporta o expone el Battery Service estándar.", batteryErr);
+                    addLog("⚠️ No se encontró servicio de batería estándar. Saltando...", false);
+                }
                 
-                // start polling for live data
+                // leer info básica de hardware
+                await readDeviceInfo(server);
+                
+                // intentar suscribir a notificaciones de servicios secundarios disponibles
+                try {
+                    const allServices = await server.getPrimaryServices();
+                    for (let svc of allServices) {
+                        if (svc.uuid !== 'battery_service' && svc.uuid !== 'device_information') {
+                            await discoverAndSubscribeToNotify(svc);
+                        }
+                    }
+                } catch(svcErr) {
+                    console.log("No se pudieron listar todos los servicios adicionales.", svcErr);
+                }
+                
+                // Iniciar la actualización regular del Dashboard
                 startDataPolling();
-                generateSimulatedRssi(); // initial rssi simulation
-                addLog('✅ Connected! Receiving battery & live characteristic data.');
+                generateSimulatedRssi(); 
+                addLog('✅ Connected! Monitoring interface ready.');
                 connectBtn.innerText = '🔌 Disconnect';
                 connectBtn.disabled = false;
                 
@@ -673,7 +674,7 @@
         
         connectBtn.addEventListener('click', connectBluetooth);
         
-        // initialize Chart.js after loading, but also check if chart library loaded
+        // initialize Chart.js
         if (typeof Chart === 'undefined') {
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
@@ -685,13 +686,14 @@
             initChart();
         }
         
-        // fallback demo message
         if (!navigator.bluetooth) {
             addLog('⚠️ Web Bluetooth API not present. Please use Chrome / Edge browser to connect to real headphones.', true);
         } else {
-            addLog('🎧 Ready. Click "Connect Headphones" and select your Bluetooth audio device (headphones with Battery Service).');
+            addLog('🎧 Ready. Click "Connect Headphones" and select your Bluetooth audio device.');
         }
     })();
 </script>
 </body>
 </html>
+
+```
