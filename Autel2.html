@@ -507,76 +507,106 @@
     }
 
     // Escaneo y conexión a dispositivo OBDII BLE
-    async function connectToObdDevice() {
-        try {
-            addConsoleLog("Buscando dispositivos OBDII Bluetooth Low Energy...");
-            // Filtrar servicios OBDII estándar: muchos adaptadores usan "FFE0", "FFF0", o servicio ELM327
-            let device = await navigator.bluetooth.requestDevice({
-                filters: [
-                    { services: ['ffe0'] },          // común en adaptadores ELM327 BLE
-                    { services: ['fff0'] },
-                    { namePrefix: 'OBD' },
-                    { namePrefix: 'V-Link' },
-                    { namePrefix: 'Autel' },
-                    { namePrefix: 'LELink' }
-                ],
-                optionalServices: ['ffe0', 'fff0', '1815', 'ff10']
-            });
-            addConsoleLog(`Dispositivo seleccionado: ${device.name || 'Desconocido'}`);
-            const server = await device.gatt.connect();
-            addConsoleLog("Conexión GATT establecida. Obteniendo servicios...");
-            let service;
-            // Intentar servicio común
-            if(device.gatt.services && device.gatt.services.get('ffe0')) {
-                service = await server.getPrimaryService('ffe0');
-            } else {
-                try { service = await server.getPrimaryService('fff0'); } catch(e) { 
-                    try { service = await server.getPrimaryService('ff10'); } catch(e2) { throw new Error("No se encontró servicio OBDII (ffe0/fff0/ff10)")}
-                }
-            }
-            addConsoleLog(`Servicio encontrado: ${service.uuid}`);
-            // Característica de escritura/lectura: normalmente "ffe1", "fff1", "ff11"
-            let characteristics = await service.getCharacteristics();
-            let writeChar = null;
-            for(let c of characteristics) {
-                let props = c.properties;
-                if((props.write || props.writeWithoutResponse) && props.read) {
-                    writeChar = c;
-                    break;
-                }
-            }
-            if(!writeChar) {
-                for(let c of characteristics) {
-                    if(props.write || props.writeWithoutResponse) { writeChar = c; break; }
-                }
-            }
-            if(!writeChar) throw new Error("No se encontró característica adecuada para OBD");
-            characteristic = writeChar;
-            bluetoothDevice = device;
-            isBleConnected = true;
-            updateConnectionUI();
-            addConsoleLog("✅ Conectado a adaptador OBDII Bluetooth. Inicializando...");
-            // Enviar comandos AT para asegurar modo OBD
-            await sendObdCommand('ATZ');   // reset
-            await delay(300);
-            let echoResp = await sendObdCommand('ATE0'); // echo off
-            addConsoleLog(`ATE0 respuesta: ${echoResp ? echoResp.substring(0,40) : 'none'}`);
-            await sendObdCommand('ATL0');   // line feed off
-            await sendObdCommand('ATH0');   // headers off
-            await sendObdCommand('ATSP0');  // protocolo automático
-            addConsoleLog("Comandos de inicialización enviados. Comenzando lectura de datos...");
-            // Primer refresh
-            await refreshAllSensors();
-            startPolling();
-        } catch (error) {
-            addConsoleLog(`Error de conexión Bluetooth: ${error.message}`, true);
-            isBleConnected = false;
-            bluetoothDevice = null;
-            characteristic = null;
-            updateConnectionUI();
-        }
-    }
+	// Escaneo y conexión a dispositivo OBDII BLE (con UUIDs completos y compatibilidad)
+	async function connectToObdDevice() {
+		try {
+			addConsoleLog("Buscando dispositivos OBDII Bluetooth Low Energy...");
+			
+			// Opción 1: Filtrar por nombre (más fiable para Autel/ELM327 genéricos)
+			// Opción 2: Usar UUIDs completos de servicios comunes en adaptadores OBDII
+			const device = await navigator.bluetooth.requestDevice({
+				filters: [
+					{ namePrefix: 'OBD' },
+					{ namePrefix: 'V-Link' },
+					{ namePrefix: 'Autel' },
+					{ namePrefix: 'LELink' },
+					{ namePrefix: 'ELM327' },
+					{ namePrefix: 'CarScanner' },
+					{ name: 'Autel OBDII' }  // Nombre exacto común
+				],
+				optionalServices: [
+					'0000ffe0-0000-1000-8000-00805f9b34fb',  // UUID completo para servicio ELM327
+					'0000fff0-0000-1000-8000-00805f9b34fb',  // Alternativo
+					'00001815-0000-1000-8000-00805f9b34fb',  // Servicio de Automoción
+					'0000ff10-0000-1000-8000-00805f9b34fb'   // Otro común
+				]
+			});
 
+			addConsoleLog(`✅ Dispositivo seleccionado: ${device.name || 'Desconocido'}`);
+			const server = await device.gatt.connect();
+			addConsoleLog("Conexión GATT establecida. Buscando servicio OBDII...");
+
+			let service = null;
+			const serviceUuids = [
+				'0000ffe0-0000-1000-8000-00805f9b34fb',
+				'0000fff0-0000-1000-8000-00805f9b34fb',
+				'00001815-0000-1000-8000-00805f9b34fb',
+				'0000ff10-0000-1000-8000-00805f9b34fb'
+			];
+
+			// Intentar obtener el servicio con los UUIDs comunes
+			for (const uuid of serviceUuids) {
+				try {
+					service = await server.getPrimaryService(uuid);
+					addConsoleLog(`✅ Servicio encontrado: ${uuid}`);
+					break;
+				} catch (e) {
+					// Continuar con el siguiente UUID
+				}
+			}
+
+			if (!service) {
+				throw new Error("No se encontró ningún servicio OBDII compatible en el dispositivo.");
+			}
+
+			// Obtener todas las características del servicio
+			const characteristics = await service.getCharacteristics();
+			let writeChar = null;
+
+			// Buscar característica con propiedad 'write' o 'writeWithoutResponse'
+			for (const char of characteristics) {
+				const properties = char.properties;
+				if (properties.write || properties.writeWithoutResponse) {
+					writeChar = char;
+					addConsoleLog(`✅ Característica de escritura encontrada: ${char.uuid}`);
+					break;
+				}
+			}
+
+			if (!writeChar) {
+				throw new Error("No se encontró característica adecuada para enviar comandos OBD.");
+			}
+
+			characteristic = writeChar;
+			bluetoothDevice = device;
+			isBleConnected = true;
+			updateConnectionUI();
+			addConsoleLog("🔌 Conectado a adaptador OBDII Bluetooth. Inicializando comunicación...");
+
+			// Enviar comandos de inicialización AT (con pausas)
+			await sendObdCommand('ATZ');
+			await delay(400);
+			await sendObdCommand('ATE0');
+			await delay(200);
+			await sendObdCommand('ATL0');
+			await delay(200);
+			await sendObdCommand('ATH0');
+			await delay(200);
+			await sendObdCommand('ATSP0');
+			await delay(300);
+			
+			addConsoleLog("⚙️ Adaptador configurado. Iniciando lectura de datos...");
+			await refreshAllSensors();
+			startPolling();
+
+		} catch (error) {
+			addConsoleLog(`❌ Error de conexión Bluetooth: ${error.message}`, true);
+			isBleConnected = false;
+			bluetoothDevice = null;
+			characteristic = null;
+			updateConnectionUI();
+		}
+	}
     // Desconectar dispositivo
     async function disconnectDevice() {
         if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
