@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>OBDII Real | USB + Bluetooth | Escáner Profesional</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 10% 20%, #0a0f1e, #010101);
+            font-family: 'Segoe UI', 'Orbitron', 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 1500px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 2.5rem;
+            border: 1px solid rgba(0, 255, 255, 0.4);
+            padding: 1.5rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.4);
+            padding-bottom: 0.8rem;
+        }
+
+        .title h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #aaffff, #f0a3ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .connection-panel {
+            display: flex;
+            gap: 15px;
+        }
+
+        .connector {
+            background: #0a1428;
+            padding: 0.5rem 1rem;
+            border-radius: 40px;
+            border: 1px solid #2c4f7a;
+            text-align: center;
+        }
+
+        .led {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4d4d;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .led.connected {
+            background: #1eff6e;
+            box-shadow: 0 0 8px #00ff80;
+        }
+
+        .btn-conn {
+            background: #001e30;
+            border: 1px solid #0ff;
+            color: #0ff;
+            padding: 0.3rem 1rem;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 8px;
+            font-weight: bold;
+        }
+
+        .btn-conn:hover {
+            background: #0ff22a20;
+            box-shadow: 0 0 6px cyan;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            gap: 1.2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(8, 18, 28, 0.8);
+            border-radius: 1.8rem;
+            padding: 1rem;
+            border: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        .value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            font-family: 'Orbitron', monospace;
+            color: #f0f9ff;
+        }
+
+        .progress-bar-bg {
+            background: #1f2a3e;
+            border-radius: 20px;
+            height: 5px;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #0ff, #f0f);
+            width: 0%;
+            height: 5px;
+            border-radius: 20px;
+        }
+
+        .mid-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.55);
+            border-radius: 1.5rem;
+            padding: 1rem;
+            border: 1px solid #2d5f7e;
+        }
+
+        .adv-data {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .adv-item {
+            background: #05121e;
+            padding: 6px 10px;
+            border-radius: 25px;
+            flex: 1;
+            text-align: center;
+        }
+
+        .dtc-list {
+            font-family: monospace;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .reflash-panel {
+            background: linear-gradient(145deg, #021018, #000000aa);
+            border-radius: 1.8rem;
+            border: 1px solid #f0a3ff80;
+            padding: 1.2rem;
+            margin-top: 0.5rem;
+        }
+
+        .cmd-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .cmd-input {
+            flex: 3;
+            background: #0a1922;
+            border: 1px solid #2f6080;
+            padding: 10px;
+            border-radius: 40px;
+            color: #0ff;
+            font-family: monospace;
+        }
+
+        .cmd-btn {
+            background: #162b36;
+            border: 1px solid cyan;
+            color: cyan;
+            padding: 8px 18px;
+            border-radius: 40px;
+            cursor: pointer;
+        }
+
+        .cmd-history {
+            background: #030c12;
+            border-radius: 1rem;
+            padding: 10px;
+            height: 120px;
+            overflow-y: auto;
+            font-size: 0.75rem;
+            color: #b0e0ff;
+        }
+
+        @media (max-width: 850px) {
+            .mid-section { grid-template-columns: 1fr; }
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 0.65rem;
+            color: #3f7f9e;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="header">
+        <div class="title">
+            <h1>⚡ OBDII REAL SCAN ⚡</h1>
+            <p>Conexiones USB (WebUSB) + Bluetooth (WebBluetooth) | Comunicación Real con Módulo OBDII</p>
+        </div>
+        <div class="connection-panel">
+            <div class="connector">
+                <div><span class="led" id="usbLed"></span>USB</div>
+                <button class="btn-conn" id="connectUsbBtn">🔌 Conectar USB</button>
+                <button class="btn-conn" id="disconnectUsbBtn" style="display:none;">❌ Desconectar</button>
+            </div>
+            <div class="connector">
+                <div><span class="led" id="btLed"></span>BLUETOOTH</div>
+                <button class="btn-conn" id="connectBtBtn">📡 Conectar BT</button>
+                <button class="btn-conn" id="disconnectBtBtn" style="display:none;">❌ Desconectar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="metrics-grid" id="basicMetrics">
+        <!-- Lecturas se llenan dinámicamente -->
+    </div>
+
+    <div class="mid-section">
+        <div class="panel">
+            <h3>📡 PARÁMETROS AVANZADOS</h3>
+            <div class="adv-data" id="advancedData"></div>
+        </div>
+        <div class="panel">
+            <h3>⚠️ CÓDIGOS DTC</h3>
+            <div class="dtc-list" id="dtcContainer"></div>
+            <button id="clearDTCBtn" style="margin-top:8px; background:#1f2c38; border:1px solid #ffaa66; color:#ffcc99; padding:4px 12px; border-radius:20px; cursor:pointer;">🗑️ Borrar códigos</button>
+        </div>
+    </div>
+
+    <div class="reflash-panel">
+        <h3 style="color:#ffb86b;">🔧 REPROGRAMACIÓN ECU</h3>
+        <div class="cmd-input-group">
+            <input type="text" class="cmd-input" id="cmdInput" placeholder="Comando OBDII (ej: 010C, 010D, 0902)">
+            <button class="cmd-btn" id="sendCmdBtn">📨 ENVIAR COMANDO</button>
+        </div>
+        <div class="cmd-history" id="cmdHistory">
+            <div class="log-line">>> Sistema listo. Conecta vía USB o Bluetooth.</div>
+            <div class="log-line">>> Requiere Chrome/Edge con HTTPS o localhost</div>
+        </div>
+    </div>
+    <div class="footer">
+        🔌 USB: WebUSB (ELM327) | 📡 Bluetooth: WebBluetooth (adaptadores OBDII)
+    </div>
+</div>
+
+<script>
+    // Variables para conexiones reales
+    let usbDevice = null;
+    let btDevice = null;
+    let btServer = null;
+    let btService = null;
+    let btCharacteristic = null;
+    let usbInterface = null;
+    let usbEndpoint = null;
+    let activeConnection = null; // 'usb' or 'bt'
+    let dataInterval = null;
+
+    // Datos del vehículo
+    let vehicleData = {
+        rpm: 0, speed: 0, coolantTemp: 0, engineLoad: 0, batteryVoltage: 12.0,
+        maf: 0, fuelPressure: 0, oilTemp: 0, boostPressure: 0, lambda: 0,
+        throttlePos: 0, barometricPressure: 0
+    };
+    
+    let activeDTCs = [];
+
+    function addLog(message, isError = false) {
+        const historyDiv = document.getElementById('cmdHistory');
+        const logLine = document.createElement('div');
+        logLine.className = 'log-line';
+        logLine.style.color = isError ? '#ffaa88' : '#a0f0ff';
+        logLine.innerHTML = `> ${new Date().toLocaleTimeString()} - ${message}`;
+        historyDiv.appendChild(logLine);
+        logLine.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Enviar comando OBDII real
+    async function sendOBDCommand(command) {
+        if (!activeConnection) {
+            addLog("❌ No hay conexión activa", true);
+            return null;
+        }
+
+        // Formatear comando (asegurar CR)
+        let cmd = command.trim();
+        if (!cmd.endsWith('\r')) cmd += '\r';
+        
+        addLog(`📤 Enviando: ${command}`);
+
+        try {
+            let response = null;
+            
+            if (activeConnection === 'usb' && usbDevice) {
+                // USB: escribir y leer
+                const encoder = new TextEncoder();
+                const decoder = new TextDecoder();
+                
+                await usbDevice.transferOut(usbEndpoint, encoder.encode(cmd));
+                
+                // Leer respuesta
+                const result = await usbDevice.transferIn(usbEndpoint, 64);
+                response = decoder.decode(result.data);
+                
+            } else if (activeConnection === 'bt' && btCharacteristic) {
+                // Bluetooth: escribir y leer
+                const encoder = new TextEncoder();
+                await btCharacteristic.writeValue(encoder.encode(cmd));
+                
+                // Esperar respuesta
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                const value = await btCharacteristic.readValue();
+                response = new TextDecoder().decode(value);
+            }
+            
+            if (response) {
+                addLog(`📥 Respuesta: ${response.substring(0, 100)}`);
+                parseOBDResponse(command, response);
+                return response;
+            }
+        } catch (error) {
+            addLog(`❌ Error: ${error.message}`, true);
+            return null;
+        }
+        return null;
+    }
+
+    // Parsear respuestas OBDII
+    function parseOBDResponse(command, response) {
+        const upperCmd = command.toUpperCase().trim();
+        
+        // RPM (010C)
+        if (upperCmd === '010C') {
+            const match = response.match(/41 0C ([A-F0-9]{2}) ([A-F0-9]{2})/i);
+            if (match) {
+                const a = parseInt(match[1], 16);
+                const b = parseInt(match[2], 16);
+                vehicleData.rpm = ((a * 256) + b) / 4;
+                updateDashboard();
+            }
+        }
+        // Velocidad (010D)
+        else if (upperCmd === '010D') {
+            const match = response.match(/41 0D ([A-F0-9]{2})/i);
+            if (match) {
+                vehicleData.speed = parseInt(match[1], 16);
+                updateDashboard();
+            }
+        }
+        // Temp Motor (0105)
+        else if (upperCmd === '0105') {
+            const match = response.match(/41 05 ([A-F0-9]{2})/i);
+            if (match) {
+                vehicleData.coolantTemp = parseInt(match[1], 16) - 40;
+                updateDashboard();
+            }
+        }
+        // Carga Motor (0104)
+        else if (upperCmd === '0104') {
+            const match = response.match(/41 04 ([A-F0-9]{2})/i);
+            if (match) {
+                vehicleData.engineLoad = (parseInt(match[1], 16) * 100) / 255;
+                updateDashboard();
+            }
+        }
+    }
+
+    // Solicitar lecturas periódicas
+    function startDataPolling() {
+        if (dataInterval) clearInterval(dataInterval);
+        
+        dataInterval = setInterval(async () => {
+            if (!activeConnection) return;
+            
+            // Solicitar PIDs básicos
+            await sendOBDCommand('010C'); // RPM
+            await sendOBDCommand('010D'); // Velocidad
+            await sendOBDCommand('0105'); // Temp motor
+            await sendOBDCommand('0104'); // Carga motor
+            await sendOBDCommand('0110'); // MAF
+            await sendOBDCommand('010B'); // Presión absoluta
+        }, 500);
+    }
+
+    // ==================== CONEXIÓN USB REAL (WebUSB) ====================
+    async function connectUSB() {
+        try {
+            // Filtrar dispositivos ELM327 o adaptadores OBDII
+            const device = await navigator.usb.requestDevice({
+                filters: [
+                    { vendorId: 0x0403 }, // FTDI
+                    { vendorId: 0x1A86 }, // CH340
+                    { vendorId: 0x10C4 }, // Silicon Labs
+                    { vendorId: 0x2341 }  // Arduino
+                ]
+            });
+            
+            await device.open();
+            
+            // Configurar interfaz (típicamente interfaz 0)
+            if (device.configuration === null) {
+                await device.selectConfiguration(1);
+            }
+            
+            await device.claimInterface(0);
+            
+            // Encontrar endpoints
+            const interface_ = device.configuration.interfaces[0];
+            const alternate = interface_.alternates[0];
+            
+            for (const endpoint of alternate.endpoints) {
+                if (endpoint.direction === 'out') {
+                    usbEndpoint = endpoint.endpointNumber;
+                    break;
+                }
+            }
+            
+            usbDevice = device;
+            activeConnection = 'usb';
+            
+            // Configurar velocidad (comando AT)
+            const encoder = new TextEncoder();
+            await device.transferOut(usbEndpoint, encoder.encode('ATZ\r'));
+            await new Promise(r => setTimeout(r, 200));
+            await device.transferOut(usbEndpoint, encoder.encode('ATSP0\r'));
+            await new Promise(r => setTimeout(r, 100));
+            
+            updateUIForConnection('usb', true);
+            addLog("✅ USB conectado correctamente. Módulo OBDII listo.");
+            startDataPolling();
+            
+        } catch (error) {
+            addLog(`❌ Error USB: ${error.message}`, true);
+        }
+    }
+
+    async function disconnectUSB() {
+        if (usbDevice) {
+            try {
+                await usbDevice.close();
+            } catch(e) {}
+            usbDevice = null;
+        }
+        if (activeConnection === 'usb') {
+            activeConnection = null;
+        }
+        updateUIForConnection('usb', false);
+        addLog("🔌 USB desconectado");
+    }
+
+    // ==================== CONEXIÓN BLUETOOTH REAL (WebBluetooth) ====================
+    async function connectBluetooth() {
+        try {
+            // Solicitar dispositivo Bluetooth (adaptadores OBDII)
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [
+                    { namePrefix: "OBD" },
+                    { namePrefix: "ELM" },
+                    { namePrefix: "CAR" },
+                    { namePrefix: "VEEPEAK" },
+                    { services: ['00001101-0000-1000-8000-00805f9b34fb'] } // Serial Port Profile
+                ],
+                optionalServices: ['00001101-0000-1000-8000-00805f9b34fb']
+            });
+            
+            btDevice = device;
+            
+            device.addEventListener('gattserverdisconnected', () => {
+                addLog("📡 Bluetooth desconectado", true);
+                if (activeConnection === 'bt') {
+                    activeConnection = null;
+                    updateUIForConnection('bt', false);
+                }
+            });
+            
+            btServer = await device.gatt.connect();
+            
+            // Obtener servicio UART
+            btService = await btServer.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
+            btCharacteristic = await btService.getCharacteristic('00001101-0000-1000-8000-00805f9b34fb');
+            
+            // Habilitar notificaciones
+            await btCharacteristic.startNotifications();
+            btCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                const value = event.target.value;
+                const response = new TextDecoder().decode(value);
+                addLog(`📥 BT: ${response.substring(0, 80)}`);
+            });
+            
+            activeConnection = 'bt';
+            updateUIForConnection('bt', true);
+            
+            // Configurar módulo ELM327
+            await sendOBDCommand('ATZ');
+            await new Promise(r => setTimeout(r, 200));
+            await sendOBDCommand('ATSP0');
+            
+            addLog("✅ Bluetooth conectado. Adaptador OBDII listo.");
+            startDataPolling();
+            
+        } catch (error) {
+            addLog(`❌ Error Bluetooth: ${error.message}`, true);
+        }
+    }
+
+    async function disconnectBluetooth() {
+        if (btDevice && btDevice.gatt.connected) {
+            btDevice.gatt.disconnect();
+        }
+        btDevice = null;
+        btServer = null;
+        btCharacteristic = null;
+        if (activeConnection === 'bt') {
+            activeConnection = null;
+        }
+        updateUIForConnection('bt', false);
+        addLog("📡 Bluetooth desconectado");
+    }
+
+    // UI Updates
+    function updateUIForConnection(type, connected) {
+        if (type === 'usb') {
+            const led = document.getElementById('usbLed');
+            const connectBtn = document.getElementById('connectUsbBtn');
+            const disconnectBtn = document.getElementById('disconnectUsbBtn');
+            
+            led.classList.toggle('connected', connected);
+            connectBtn.style.display = connected ? 'none' : 'inline-block';
+            disconnectBtn.style.display = connected ? 'inline-block' : 'none';
+        } else if (type === 'bt') {
+            const led = document.getElementById('btLed');
+            const connectBtn = document.getElementById('connectBtBtn');
+            const disconnectBtn = document.getElementById('disconnectBtBtn');
+            
+            led.classList.toggle('connected', connected);
+            connectBtn.style.display = connected ? 'none' : 'inline-block';
+            disconnectBtn.style.display = connected ? 'inline-block' : 'none';
+        }
+        
+        if (!activeConnection) {
+            if (dataInterval) {
+                clearInterval(dataInterval);
+                dataInterval = null;
+            }
+        }
+    }
+
+    function updateDashboard() {
+        renderBasicCards();
+        renderAdvancedCards();
+    }
+
+    function renderBasicCards() {
+        const container = document.getElementById('basicMetrics');
+        container.innerHTML = `
+            <div class="card"><div class="card-header">🔁 RPM</div><div class="value">${vehicleData.rpm || 0} rpm</div><div class="progress-bar-bg"><div class="progress-fill" style="width: ${Math.min(100, (vehicleData.rpm/7000)*100)}%"></div></div></div>
+            <div class="card"><div class="card-header">🚗 Velocidad</div><div class="value">${vehicleData.speed || 0} km/h</div><div class="progress-bar-bg"><div class="progress-fill" style="width: ${(vehicleData.speed/280)*100}%"></div></div></div>
+            <div class="card"><div class="card-header">🌡️ Temp. Motor</div><div class="value">${vehicleData.coolantTemp || 0} °C</div></div>
+            <div class="card"><div class="card-header">⚙️ Carga Motor</div><div class="value">${Math.round(vehicleData.engineLoad || 0)} %</div></div>
+            <div class="card"><div class="card-header">🔋 Voltaje</div><div class="value">${vehicleData.batteryVoltage} V</div></div>
+        `;
+    }
+
+    function renderAdvancedCards() {
+        const container = document.getElementById('advancedData');
+        container.innerHTML = `
+            <div class="adv-item"><div class="adv-label">Presión Combustible</div><div class="adv-number">${vehicleData.fuelPressure || 0} kPa</div></div>
+            <div class="adv-item"><div class="adv-label">Temp Aceite</div><div class="adv-number">${vehicleData.oilTemp || 0} °C</div></div>
+            <div class="adv-item"><div class="adv-label">Presión Turbo</div><div class="adv-number">${vehicleData.boostPressure || 0} bar</div></div>
+            <div class="adv-item"><div class="adv-label">Lambda</div><div class="adv-number">${vehicleData.lambda || 0} λ</div></div>
+        `;
+    }
+
+    function renderDTCs() {
+        const dtcDiv = document.getElementById('dtcContainer');
+        if (activeDTCs.length === 0) {
+            dtcDiv.innerHTML = '<div>✅ Sin códigos de falla</div>';
+        } else {
+            dtcDiv.innerHTML = activeDTCs.map(dtc => `<div class="dtc-item">${dtc.code} - ${dtc.desc}</div>`).join('');
+        }
+    }
+
+    async function clearDTCs() {
+        await sendOBDCommand('0400'); // Borrar códigos
+        activeDTCs = [];
+        renderDTCs();
+        addLog("✅ Códigos DTC borrados");
+    }
+
+    // Event Listeners
+    document.getElementById('connectUsbBtn').addEventListener('click', connectUSB);
+    document.getElementById('disconnectUsbBtn').addEventListener('click', disconnectUSB);
+    document.getElementById('connectBtBtn').addEventListener('click', connectBluetooth);
+    document.getElementById('disconnectBtBtn').addEventListener('click', disconnectBluetooth);
+    document.getElementById('sendCmdBtn').addEventListener('click', () => {
+        const input = document.getElementById('cmdInput');
+        if (input.value) sendOBDCommand(input.value);
+        input.value = '';
+    });
+    document.getElementById('clearDTCBtn').addEventListener('click', clearDTCs);
+
+    // Verificar soporte de APIs
+    if (!navigator.usb) {
+        addLog("⚠️ WebUSB no soportado. Usa Chrome/Edge con HTTPS", true);
+        document.getElementById('connectUsbBtn').disabled = true;
+    }
+    if (!navigator.bluetooth) {
+        addLog("⚠️ WebBluetooth no soportado. Usa Chrome/Edge con HTTPS", true);
+        document.getElementById('connectBtBtn').disabled = true;
+    }
+
+    addLog("✅ Dashboard listo. Conecta tu adaptador OBDII vía USB o Bluetooth.");
+</script>
+</body>
+</html>
