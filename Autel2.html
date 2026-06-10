@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>AutoDash BLE - OBDII Bluetooth | Autel & ELM327</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0b1120 0%, #0a0f1a 100%);
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+            color: #eef5ff;
+        }
+
+        .dashboard {
+            max-width: 1440px;
+            margin: 0 auto;
+        }
+
+        /* Header con opciones BT */
+        .header {
+            background: rgba(15, 25, 45, 0.8);
+            backdrop-filter: blur(12px);
+            border-radius: 2rem;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 28px;
+            border: 1px solid rgba(0, 180, 255, 0.25);
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+        }
+
+        .title h1 {
+            font-size: 1.7rem;
+            background: linear-gradient(120deg, #90f7ec, #3b82f6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .title p {
+            font-size: 0.75rem;
+            color: #89a9e0;
+        }
+
+        .bt-controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            background: #1e2a3e;
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 60px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.8rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .btn-primary {
+            background: #0f3b6f;
+            border: 1px solid #3b82f6;
+        }
+
+        .btn-primary:hover {
+            background: #1e4a8a;
+            transform: scale(0.97);
+        }
+
+        .btn-danger {
+            background: #5a2a2a;
+        }
+
+        .status-badge {
+            background: #111827;
+            padding: 6px 18px;
+            border-radius: 60px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8rem;
+        }
+
+        .led {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #6b7280;
+            transition: all 0.2s;
+        }
+
+        .led.green {
+            background: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+        }
+
+        .led.blue {
+            background: #3b82f6;
+            box-shadow: 0 0 8px #3b82f6;
+        }
+
+        .led.red {
+            background: #ef4444;
+        }
+
+        /* Grid */
+        .grid-main {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(12, 20, 30, 0.75);
+            backdrop-filter: blur(4px);
+            border-radius: 1.6rem;
+            border: 1px solid rgba(59,130,246,0.2);
+            padding: 1.3rem 1.5rem;
+            transition: all 0.2s;
+        }
+
+        .card:hover {
+            border-color: rgba(59,130,246,0.5);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #2d3a55;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+
+        .gauge-item {
+            text-align: center;
+            background: #0a101ccc;
+            border-radius: 1.2rem;
+            padding: 8px;
+        }
+
+        .gauge-value {
+            font-size: 1.9rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            background: #030712;
+            margin: 8px 0;
+            border-radius: 20px;
+            padding: 6px;
+            color: #3bc9ff;
+        }
+
+        .command-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .command-row {
+            background: #0f172a80;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 50px;
+        }
+
+        .cmd-btn {
+            background: #2d3b55;
+            border: none;
+            color: white;
+            padding: 5px 18px;
+            border-radius: 40px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+
+        .cmd-btn:active {
+            transform: scale(0.94);
+        }
+
+        .console-area {
+            background: #03060e;
+            border-radius: 1.2rem;
+            padding: 12px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.7rem;
+            margin-top: 15px;
+        }
+
+        .console-line {
+            border-bottom: 1px solid #1e2a3a;
+            padding: 5px 6px;
+            word-break: break-all;
+        }
+
+        .custom-cmd {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .custom-input {
+            flex: 2;
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 10px 15px;
+            border-radius: 50px;
+            color: white;
+            font-family: monospace;
+        }
+
+        .btn-send {
+            background: #2563eb;
+            padding: 0 20px;
+            border-radius: 40px;
+            border: none;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 0.7rem;
+            text-align: center;
+            color: #5f7f9e;
+        }
+
+        @media (max-width: 700px) {
+            .sensor-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="header">
+        <div class="title">
+            <h1>🚗 AutoDash BLE · OBDII</h1>
+            <p>Bluetooth Low Energy | Autel / ELM327 | Comandos ECU en tiempo real</p>
+        </div>
+        <div class="bt-controls">
+            <div class="status-badge">
+                <div class="led" id="btLed"></div>
+                <span id="btStatusText">Desconectado</span>
+            </div>
+            <button id="scanBtn" class="btn btn-primary">🔍 Escanear BT</button>
+            <button id="disconnectBtn" class="btn" style="background:#4a2f2f;">⛔ Desconectar</button>
+        </div>
+    </div>
+
+    <div class="grid-main">
+        <!-- Panel de sensores en vivo -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📈 PARÁMETROS EN VIVO</h3>
+                <span class="badge" style="background:#0f2a3f;">BLE OBDII</span>
+            </div>
+            <div class="sensor-grid" id="sensorArea">
+                <div class="gauge-item"><div class="gauge-label">RPM</div><div class="gauge-value" id="rpmVal">0</div><div class="unit">rpm</div></div>
+                <div class="gauge-item"><div class="gauge-label">VELOCIDAD</div><div class="gauge-value" id="speedVal">0</div><div class="unit">km/h</div></div>
+                <div class="gauge-item"><div class="gauge-label">TEMP. REFRIG.</div><div class="gauge-value" id="coolantVal">--</div><div class="unit">°C</div></div>
+                <div class="gauge-item"><div class="gauge-label">CARGA MOTOR</div><div class="gauge-value" id="loadVal">0</div><div class="unit">%</div></div>
+                <div class="gauge-item"><div class="gauge-label">VOLTAJE BATERÍA</div><div class="gauge-value" id="voltageVal">--</div><div class="unit">V</div></div>
+                <div class="gauge-item"><div class="gauge-label">TEMP. AIRE</div><div class="gauge-value" id="iatVal">--</div><div class="unit">°C</div></div>
+            </div>
+        </div>
+        
+        <!-- Panel comandos rápidos ECU -->
+        <div class="card">
+            <div class="card-header">
+                <h3>🕹️ COMANDOS ECU</h3>
+                <span>Modos 01/03/04</span>
+            </div>
+            <div class="command-list" id="quickCommandsPanel"></div>
+            <div class="custom-cmd">
+                <input type="text" id="customPid" class="custom-input" placeholder="Ej: 010C, 010D, 03, 04, 0142" autocomplete="off">
+                <button id="sendCustomBtn" class="btn-send">📡 Enviar</button>
+            </div>
+        </div>
+
+        <!-- Consola / Logs Bluetooth -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <div class="card-header">
+                <h3>📟 CONSOLA OBDII (Bluetooth)</h3>
+                <button id="clearConsoleBtn" class="cmd-btn" style="background:#1f2a40;">🧹 Limpiar</button>
+            </div>
+            <div class="console-area" id="btConsole">
+                <div class="console-line">✅ Sistema listo. Usa "Escanear BT" para conectar a escáner OBDII (Autel / ELM327 BLE).</div>
+                <div class="console-line">🔹 Asegúrate de que el dispositivo esté encendido y en modo pareamiento.</div>
+            </div>
+        </div>
+    </div>
+    <div class="footer">
+        ⚡ Compatible con adaptadores OBDII Bluetooth LE (BLE 4.0+): Autel, Veepeak, LELink, etc. Envía comandos estilo ELM327.
+    </div>
+</div>
+
+<script>
+    // ---------------- GESTIÓN BLUETOOTH OBDII (Web Bluetooth API) ----------------
+    let bluetoothDevice = null;
+    let characteristic = null;
+    let isBleConnected = false;
+    let pollInterval = null;
+
+    // Referencias UI
+    const btLed = document.getElementById('btLed');
+    const btStatusSpan = document.getElementById('btStatusText');
+    const scanBtn = document.getElementById('scanBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const consoleDiv = document.getElementById('btConsole');
+    const customPidInput = document.getElementById('customPid');
+    const sendCustomBtn = document.getElementById('sendCustomBtn');
+    const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+
+    // Elementos sensores
+    const rpmSpan = document.getElementById('rpmVal');
+    const speedSpan = document.getElementById('speedVal');
+    const coolantSpan = document.getElementById('coolantVal');
+    const loadSpan = document.getElementById('loadVal');
+    const voltageSpan = document.getElementById('voltageVal');
+    const iatSpan = document.getElementById('iatVal');
+
+    // Variables para datos actuales (fallback en caso de no respuesta)
+    let liveData = { rpm: 0, speed: 0, coolant: '--', load: 0, voltage: '--', iat: '--' };
+
+    // Función para agregar logs a consola OBD
+    function addConsoleLog(message, isError = false) {
+        const logLine = document.createElement('div');
+        logLine.className = 'console-line';
+        const timestamp = new Date().toLocaleTimeString();
+        const prefix = isError ? '⚠️' : '🔹';
+        logLine.innerHTML = `<span style="color:#69b3ff;">[${timestamp}]</span> ${prefix} ${message}`;
+        consoleDiv.appendChild(logLine);
+        logLine.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // mantener max 200 líneas
+        while(consoleDiv.children.length > 180) consoleDiv.removeChild(consoleDiv.firstChild);
+    }
+
+    // Actualizar UI de conexión Bluetooth
+    function updateConnectionUI() {
+        if (isBleConnected && bluetoothDevice && bluetoothDevice.gatt.connected) {
+            btLed.className = 'led green';
+            btStatusSpan.innerText = 'Conectado a OBDII BLE';
+            scanBtn.disabled = false;
+        } else {
+            btLed.className = 'led red';
+            btStatusSpan.innerText = 'Desconectado';
+            isBleConnected = false;
+            if(pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        }
+    }
+
+    // Enviar comando AT/ raw a través del servicio OBDII (escritura y lectura)
+    async function sendObdCommand(command) {
+        if (!isBleConnected || !characteristic) {
+            addConsoleLog(`No conectado a ningún dispositivo Bluetooth. Escanea y conecta primero.`, true);
+            return null;
+        }
+        // Limpiar comando
+        let cmd = command.trim().toUpperCase();
+        if (!cmd.endsWith('\r')) cmd += '\r';
+        const encoder = new TextEncoder();
+        try {
+            await characteristic.writeValue(encoder.encode(cmd));
+            addConsoleLog(`📤 Enviado: ${command} `);
+            // Esperar respuesta (leer después de un breve delay)
+            const response = await readWithTimeout(characteristic, 800);
+            return response;
+        } catch (err) {
+            addConsoleLog(`Error al enviar comando: ${err.message}`, true);
+            return null;
+        }
+    }
+
+    // Leer respuesta con timeout
+    async function readWithTimeout(characteristic, timeoutMs) {
+        return new Promise(async (resolve, reject) => {
+            let timeout = setTimeout(() => reject(new Error("Timeout lectura OBD")), timeoutMs);
+            try {
+                let value = await characteristic.readValue();
+                clearTimeout(timeout);
+                let decoder = new TextDecoder();
+                let responseStr = decoder.decode(value);
+                resolve(responseStr);
+            } catch(e) {
+                clearTimeout(timeout);
+                reject(e);
+            }
+        });
+    }
+
+    // Función para ejecutar un comando y mostrar respuesta en consola (y procesar datos si es sensor)
+    async function execObdCommandAndLog(command, description = "") {
+        if (!isBleConnected) {
+            addConsoleLog(`No conectado: no se puede enviar ${command}`, true);
+            return null;
+        }
+        let response = await sendObdCommand(command);
+        if (response) {
+            let cleaned = response.replace(/[\x00-\x1F]/g, ' ').trim();
+            addConsoleLog(`📥 Respuesta: ${cleaned} ${description ? `(${description})` : ''}`);
+            // Procesar posibles actualizaciones de sensores según comando
+            parseOBDResponse(command, cleaned);
+            return cleaned;
+        } else {
+            addConsoleLog(`Sin respuesta para ${command}`, true);
+            return null;
+        }
+    }
+
+    // Decodificar respuestas OBDII (modo 01) para actualizar UI automáticamente
+    function parseOBDResponse(cmdSent, rawResponse) {
+        // Intentar parsear respuesta tipo "41 0C 1A F0" o "41 0D 2C"
+        let upperResp = rawResponse.toUpperCase();
+        let pidMatch = cmdSent.match(/01([0-9A-F]{2})/i);
+        if (!pidMatch) return;
+        let pid = pidMatch[1].toUpperCase();
+        // buscar patrón 41 xx data..
+        let regex = new RegExp(`41\\s*${pid}\\s+([0-9A-F]{2})(?:\\s+([0-9A-F]{2}))?`, 'i');
+        let match = upperResp.match(regex);
+        if (!match) return;
+
+        if (pid === '0C') { // RPM
+            let a = parseInt(match[1], 16);
+            let b = match[2] ? parseInt(match[2], 16) : 0;
+            let rpm = ((a * 256) + b) / 4;
+            liveData.rpm = Math.round(rpm);
+            rpmSpan.innerText = liveData.rpm;
+        } else if (pid === '0D') { // Velocidad
+            let speed = parseInt(match[1], 16);
+            liveData.speed = speed;
+            speedSpan.innerText = speed;
+        } else if (pid === '05') { // Temperatura refrigerante
+            let coolantRaw = parseInt(match[1], 16);
+            let coolantC = coolantRaw - 40;
+            liveData.coolant = coolantC;
+            coolantSpan.innerText = coolantC;
+        } else if (pid === '04') { // Carga motor (calculada)
+            let loadRaw = parseInt(match[1], 16);
+            let loadPercent = Math.round((loadRaw / 255) * 100);
+            liveData.load = loadPercent;
+            loadSpan.innerText = loadPercent;
+        } else if (pid === '42') { // Voltaje batería (módulo de control)
+            let voltRaw = parseInt(match[1], 16);
+            let voltage = (voltRaw * 8) / 255;
+            let voltageFixed = voltage.toFixed(1);
+            liveData.voltage = voltageFixed;
+            voltageSpan.innerText = voltageFixed;
+        } else if (pid === '0F') { // IAT temp aire
+            let iatRaw = parseInt(match[1], 16);
+            let iatC = iatRaw - 40;
+            liveData.iat = iatC;
+            iatSpan.innerText = iatC;
+        }
+    }
+
+    // Actualizar todos los sensores vía peticiones OBD secuenciales
+    async function refreshAllSensors() {
+        if (!isBleConnected) return;
+        // Mandamos peticiones rápidas
+        await execObdCommandAndLog('010C', 'RPM');
+        await delay(60);
+        await execObdCommandAndLog('010D', 'Velocidad');
+        await delay(60);
+        await execObdCommandAndLog('0105', 'Temp refrigerante');
+        await delay(60);
+        await execObdCommandAndLog('0104', 'Carga motor');
+        await delay(60);
+        await execObdCommandAndLog('0142', 'Voltaje');
+        await delay(60);
+        await execObdCommandAndLog('010F', 'IAT');
+    }
+
+    // Polling cíclico solo si está conectado
+    function startPolling() {
+        if(pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(async () => {
+            if(isBleConnected && characteristic) {
+                await refreshAllSensors();
+            }
+        }, 2200);
+    }
+
+    // Escaneo y conexión a dispositivo OBDII BLE
+    async function connectToObdDevice() {
+        try {
+            addConsoleLog("Buscando dispositivos OBDII Bluetooth Low Energy...");
+            // Filtrar servicios OBDII estándar: muchos adaptadores usan "FFE0", "FFF0", o servicio ELM327
+            let device = await navigator.bluetooth.requestDevice({
+                filters: [
+                    { services: ['ffe0'] },          // común en adaptadores ELM327 BLE
+                    { services: ['fff0'] },
+                    { namePrefix: 'OBD' },
+                    { namePrefix: 'V-Link' },
+                    { namePrefix: 'Autel' },
+                    { namePrefix: 'LELink' }
+                ],
+                optionalServices: ['ffe0', 'fff0', '1815', 'ff10']
+            });
+            addConsoleLog(`Dispositivo seleccionado: ${device.name || 'Desconocido'}`);
+            const server = await device.gatt.connect();
+            addConsoleLog("Conexión GATT establecida. Obteniendo servicios...");
+            let service;
+            // Intentar servicio común
+            if(device.gatt.services && device.gatt.services.get('ffe0')) {
+                service = await server.getPrimaryService('ffe0');
+            } else {
+                try { service = await server.getPrimaryService('fff0'); } catch(e) { 
+                    try { service = await server.getPrimaryService('ff10'); } catch(e2) { throw new Error("No se encontró servicio OBDII (ffe0/fff0/ff10)")}
+                }
+            }
+            addConsoleLog(`Servicio encontrado: ${service.uuid}`);
+            // Característica de escritura/lectura: normalmente "ffe1", "fff1", "ff11"
+            let characteristics = await service.getCharacteristics();
+            let writeChar = null;
+            for(let c of characteristics) {
+                let props = c.properties;
+                if((props.write || props.writeWithoutResponse) && props.read) {
+                    writeChar = c;
+                    break;
+                }
+            }
+            if(!writeChar) {
+                for(let c of characteristics) {
+                    if(props.write || props.writeWithoutResponse) { writeChar = c; break; }
+                }
+            }
+            if(!writeChar) throw new Error("No se encontró característica adecuada para OBD");
+            characteristic = writeChar;
+            bluetoothDevice = device;
+            isBleConnected = true;
+            updateConnectionUI();
+            addConsoleLog("✅ Conectado a adaptador OBDII Bluetooth. Inicializando...");
+            // Enviar comandos AT para asegurar modo OBD
+            await sendObdCommand('ATZ');   // reset
+            await delay(300);
+            let echoResp = await sendObdCommand('ATE0'); // echo off
+            addConsoleLog(`ATE0 respuesta: ${echoResp ? echoResp.substring(0,40) : 'none'}`);
+            await sendObdCommand('ATL0');   // line feed off
+            await sendObdCommand('ATH0');   // headers off
+            await sendObdCommand('ATSP0');  // protocolo automático
+            addConsoleLog("Comandos de inicialización enviados. Comenzando lectura de datos...");
+            // Primer refresh
+            await refreshAllSensors();
+            startPolling();
+        } catch (error) {
+            addConsoleLog(`Error de conexión Bluetooth: ${error.message}`, true);
+            isBleConnected = false;
+            bluetoothDevice = null;
+            characteristic = null;
+            updateConnectionUI();
+        }
+    }
+
+    // Desconectar dispositivo
+    async function disconnectDevice() {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+            try {
+                await bluetoothDevice.gatt.disconnect();
+                addConsoleLog("Desconectado manualmente del dispositivo OBDII.");
+            } catch(e) { addConsoleLog("Error al desconectar: "+e.message, true); }
+        }
+        isBleConnected = false;
+        bluetoothDevice = null;
+        characteristic = null;
+        updateConnectionUI();
+        // Reset sensores a 0 o --
+        rpmSpan.innerText = "0";
+        speedSpan.innerText = "0";
+        coolantSpan.innerText = "--";
+        loadSpan.innerText = "0";
+        voltageSpan.innerText = "--";
+        iatSpan.innerText = "--";
+        liveData = { rpm:0, speed:0, coolant:'--', load:0, voltage:'--', iat:'--' };
+    }
+
+    // Comando personalizado
+    async function sendCustomPid() {
+        let cmd = customPidInput.value.trim();
+        if(!cmd) { addConsoleLog("Escriba un PID o comando OBD (ej: 010C, 03, 010D)", true); return; }
+        if(!isBleConnected) { addConsoleLog("No hay conexión Bluetooth activa. Escanea y conecta primero.", true); return; }
+        let response = await sendObdCommand(cmd);
+        if(response) {
+            let cleaned = response.replace(/[\x00-\x1F]/g, ' ').trim();
+            addConsoleLog(`Respuesta a ${cmd}: ${cleaned}`);
+            parseOBDResponse(cmd, cleaned);
+        } else {
+            addConsoleLog(`Sin respuesta para comando: ${cmd}`, true);
+        }
+        customPidInput.value = '';
+    }
+
+    // Funciones auxiliares
+    function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+    // Botones rápidos precargados
+    const quickCommands = [
+        { name: "🔁 RPM", pid: "010C" }, { name: "📟 Velocidad", pid: "010D" }, { name: "🌡️ Temp. Refrigerante", pid: "0105" },
+        { name: "⚡ Carga Motor", pid: "0104" }, { name: "🔋 Voltaje Batería", pid: "0142" }, { name: "❄️ IAT", pid: "010F" },
+        { name: "⚠️ Leer DTCs", pid: "03" }, { name: "🧹 Borrar DTCs", pid: "04" }
+    ];
+
+    function buildQuickCommands() {
+        const container = document.getElementById('quickCommandsPanel');
+        container.innerHTML = '';
+        quickCommands.forEach(cmd => {
+            const row = document.createElement('div');
+            row.className = 'command-row';
+            row.innerHTML = `
+                <span><strong>${cmd.name}</strong><span style="margin-left:8px; font-size:0.7rem;">${cmd.pid}</span></span>
+                <button class="cmd-btn quick-cmd" data-pid="${cmd.pid}">ENVIAR</button>
+            `;
+            container.appendChild(row);
+        });
+        document.querySelectorAll('.quick-cmd').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                let pid = btn.getAttribute('data-pid');
+                if(!isBleConnected) { addConsoleLog("Primero conecta vía Bluetooth", true); return; }
+                await execObdCommandAndLog(pid, "comando rápido");
+            });
+        });
+    }
+
+    // Modo simulación offline? al no tener BT el usuario puede usar el modo demo? no, se mantiene real BT.
+    // Pero mostrar que la conexión es real. Si el navegador no soporta Web Bluetooth se informa.
+    function checkWebBluetoothSupport() {
+        if (!('bluetooth' in navigator)) {
+            addConsoleLog("❌ Tu navegador NO soporta Web Bluetooth. Usa Chrome/Edge en Android o escritorio.", true);
+            scanBtn.disabled = true;
+            disconnectBtn.disabled = true;
+        } else {
+            addConsoleLog("🌐 Web Bluetooth disponible. Escanea tu adaptador OBDII BLE (Autel/ELM327).");
+        }
+    }
+
+    // Event listeners
+    scanBtn.addEventListener('click', () => {
+        if(isBleConnected) {
+            addConsoleLog("Ya hay una conexión activa. Desconecta antes de escanear de nuevo.", true);
+            return;
+        }
+        connectToObdDevice().catch(err => addConsoleLog("Error escaneo: "+err.message, true));
+    });
+    disconnectBtn.addEventListener('click', () => disconnectDevice());
+    sendCustomBtn.addEventListener('click', () => sendCustomPid());
+    clearConsoleBtn.addEventListener('click', () => {
+        while(consoleDiv.children.length > 2) consoleDiv.removeChild(consoleDiv.lastChild);
+        addConsoleLog("Consola limpiada.");
+    });
+    customPidInput.addEventListener('keypress', (e) => { if(e.key==='Enter') sendCustomPid(); });
+
+    // Inicializar
+    buildQuickCommands();
+    checkWebBluetoothSupport();
+    updateConnectionUI();
+    // Si por algún motivo no hay conexión, no hay polling
+    addConsoleLog("🔷 AutoDash BLE listo. Presiona 'Escanear BT' para conectar al adaptador OBDII (Autel/Genérico BLE).");
+    addConsoleLog("💡 Asegúrate de que el dispositivo OBD esté encendido y en modo pareamiento.");
+</script>
+</body>
+</html>
