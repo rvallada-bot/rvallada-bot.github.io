@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBD2 Universal Scanner</title>
+    <style>
+        :root {
+            --bg-color: #0f141c;
+            --panel-color: #1a222d;
+            --accent-color: #00e5ff;
+            --text-color: #ffffff;
+            --text-muted: #708090;
+            --success: #00e676;
+            --warning: #ffea00;
+            --danger: #ff1744;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header / Barra de Estado */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--panel-color);
+            padding: 15px 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #2d3d52;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .logo {
+            font-weight: bold;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            color: var(--accent-color);
+        }
+
+        .logo span { color: var(--text-color); }
+
+        .btn-connect {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-connect:hover {
+            background-color: #00b3cc;
+            box-shadow: 0 0 10px rgba(0,229,255,0.5);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            background-color: var(--danger);
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot.scanning {
+            background-color: var(--warning);
+            animation: pulse 1s infinite alternate;
+        }
+
+        .dot.connected { background-color: var(--success); }
+
+        @keyframes pulse {
+            from { opacity: 0.4; }
+            to { opacity: 1; }
+        }
+
+        /* Grid Principal */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* Contenedor Izquierdo Dinámico */
+        .display-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            width: 100%;
+        }
+
+        .gauge-card {
+            background-color: var(--panel-color);
+            border: 1px solid #2d3d52;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gauge-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background-color: var(--accent-color);
+        }
+
+        .gauge-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .gauge-value {
+            font-size: 3rem;
+            font-weight: 300;
+            margin: 15px 0;
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .gauge-unit {
+            font-size: 1rem;
+            color: var(--accent-color);
+            margin-left: 5px;
+        }
+
+        /* Pantalla de Búsqueda / Radar */
+        .search-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 20, 28, 0.95);
+            border-radius: 12px;
+            border: 2px dashed var(--warning);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .radar {
+            width: 120px;
+            height: 120px;
+            border: 2px solid var(--warning);
+            border-radius: 50%;
+            position: relative;
+            margin-bottom: 20px;
+            box-shadow: 0 0 20px rgba(255, 234, 0, 0.2);
+        }
+
+        .radar::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 50%; height: 2px;
+            background: linear-gradient(90deg, var(--warning), transparent);
+            transform-origin: left center;
+            animation: radar-sweep 2s linear infinite;
+        }
+
+        @keyframes radar-sweep {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .search-status-text {
+            font-size: 1.2rem;
+            color: var(--warning);
+            letter-spacing: 1px;
+            font-weight: bold;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        /* Panel Lateral */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel {
+            background-color: var(--panel-color);
+            border: 1px solid #2d3d52;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .panel h3 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #2d3d52;
+            padding-bottom: 8px;
+            color: var(--accent-color);
+        }
+
+        .terminal {
+            background-color: #0a0e14;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #00ff00;
+            overflow-y: auto;
+            flex: 1;
+            max-height: 220px;
+        }
+
+        .dtc-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">UNIVERSAL_<span>OBD2</span> v5.0</div>
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <div class="status-indicator">
+                <span id="status-dot" class="dot"></span>
+                <span id="status-text">DESCONECTADO</span>
+            </div>
+            <button class="btn-connect" id="connect-btn">Buscar Escáner</button>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        
+        <div class="display-container">
+            
+            <div class="search-overlay" id="search-screen">
+                <div class="radar"></div>
+                <div class="search-status-text" id="search-msg">Escaneando Canales Bluetooth...</div>
+                <p style="color: var(--text-muted); margin-top: 10px; font-size: 0.9rem; text-align: center;">Buscando interfaces OBD2 / ELM327 / Viecar / V-Gate activos</p>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="gauge-card">
+                    <div class="gauge-label">Motor (RPM)</div>
+                    <div class="gauge-value"><span id="val-rpm">0</span><span class="gauge-unit">rpm</span></div>
+                </div>
+                <div class="gauge-card">
+                    <div class="gauge-label">Velocidad</div>
+                    <div class="gauge-value"><span id="val-speed">0</span><span class="gauge-unit">km/h</span></div>
+                </div>
+                <div class="gauge-card">
+                    <div class="gauge-label">Temp. Refrigerante</div>
+                    <div class="gauge-value"><span id="val-temp">0</span><span class="gauge-unit">°C</span></div>
+                </div>
+                <div class="gauge-card">
+                    <div class="gauge-label">Carga del Motor</div>
+                    <div class="gauge-value"><span id="val-load">0</span><span class="gauge-unit">%</span></div>
+                </div>
+                <div class="gauge-card">
+                    <div class="gauge-label">Posición Acelerador</div>
+                    <div class="gauge-value"><span id="val-throttle">0</span><span class="gauge-unit">%</span></div>
+                </div>
+                <div class="gauge-card">
+                    <div class="gauge-label">Voltaje OBD</div>
+                    <div class="gauge-value"><span id="val-voltage">0.0</span><span class="gauge-unit">V</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="panel">
+                <h3>Diagnóstico de Errores (DTC)</h3>
+                <div class="dtc-container" id="dtc-box">
+                    <div style="color: var(--success); font-size: 0.9rem;">Sistemas escaneados OK. Sin códigos de falla.</div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>Terminal RX/TX Monitor</h3>
+                <div class="terminal" id="terminal-log">> Interfaz lista. Inicie búsqueda universal...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // UUID estándar internacional para perfiles Seriales de datos (RFCOMM) usado por el 99% de los módulos OBD2 del mercado
+        const SERIAL_PORT_UUID = '00001101-0000-1000-8000-00805f9b34fb'; 
+
+        let bluetoothDevice = null;
+        let obdCharacteristic = null;
+        let pollingInterval = null;
+
+        const connectBtn = document.getElementById('connect-btn');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const terminalLog = document.getElementById('terminal-log');
+        const searchScreen = document.getElementById('search-screen');
+        const searchMsg = document.getElementById('search-msg');
+
+        const PIDS = {
+            RPM: '010C\r',
+            SPEED: '010D\r',
+            COOLANT_TEMP: '0105\r'
+        };
+
+        connectBtn.addEventListener('click', async () => {
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                disconnectDevice();
+                return;
+            }
+
+            if (!navigator.bluetooth) {
+                logTerminal("Error: Este navegador o protocolo no soporta Web Bluetooth (Requiere HTTPS).");
+                return;
+            }
+
+            try {
+                // Interfaz en modo búsqueda masiva
+                searchScreen.style.display = 'flex';
+                searchMsg.innerText = "Abriendo diálogo de emparejamiento universal...";
+                statusDot.className = "dot scanning";
+                statusText.innerText = "BUSCANDO CUALQUIER OBD2...";
+                statusText.style.color = "var(--warning)";
+                logTerminal("Escaneando el entorno físico en busca de hardware compatible...");
+
+                // CAMBIO CLAVE: Aceptamos TODOS los dispositivos del entorno (acceptAllDevices) 
+                // pero le exigimos al sistema operativo que habilite internamente el canal Serial OBD2 (optionalServices)
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [SERIAL_PORT_UUID]
+                });
+
+                searchMsg.innerText = `Enlazando con hardware: ${bluetoothDevice.name || 'Dispositivo Genérico'}...`;
+                logTerminal(`Dispositivo seleccionado: ${bluetoothDevice.name || 'Sin Nombre'}. Conectando a servicios GATT...`);
+                
+                const server = await bluetoothDevice.gatt.connect();
+                
+                searchMsg.innerText = "Sincronizando puerto serie de datos...";
+                const service = await server.getPrimaryService(SERIAL_PORT_UUID);
+                obdCharacteristic = await service.getCharacteristic(SERIAL_PORT_UUID);
+
+                // Escuchar ráfagas de datos entrantes del carro
+                await obdCharacteristic.startNotifications();
+                obdCharacteristic.addEventListener('characteristicvaluechanged', handleOBDResponse);
+
+                // Conexión exitosa
+                searchScreen.style.display = 'none'; 
+                statusDot.className = "dot connected";
+                statusText.innerText = "CONECTADO (" + (bluetoothDevice.name || "OBD2 Genérico") + ")";
+                statusText.style.color = "var(--success)";
+                connectBtn.innerText = "Desconectar";
+                logTerminal("Canal abierto. Enviando comandos de sincronización multimarca...");
+
+                // Rutina de inicio en frío para cualquier hardware OBD
+                await sendATCommand('ATZ\r');       // Reset total del chip interno
+                await new Promise(r => setTimeout(r, 600));
+                await sendATCommand('ATE0\r');      // Apagar Eco para ahorrar ancho de banda
+                await new Promise(r => setTimeout(r, 300));
+                await sendATCommand('ATSP0\r');     // Autodetección de protocolo de comunicación (CAN BUS, K-Line, J1850)
+
+                startPolling();
+
+            } catch (error) {
+                searchScreen.style.display = 'none';
+                statusDot.className = "dot";
+                statusText.innerText = "DESCONECTADO";
+                statusText.style.color = "var(--danger)";
+                logTerminal("Búsqueda cancelada o error de emparejamiento: " + error);
+                console.error(error);
+            }
+        });
+
+        function disconnectDevice() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            }
+            searchScreen.style.display = 'none';
+            statusDot.className = "dot";
+            statusText.innerText = "DESCONECTADO";
+            statusText.style.color = "var(--danger)";
+            connectBtn.innerText = "Buscar Escáner";
+            logTerminal("Escáner desconectado.");
+        }
+
+        function logTerminal(msg) {
+            terminalLog.innerHTML += `<br>> ${msg}`;
+            terminalLog.scrollTop = terminalLog.scrollHeight;
+        }
+
+        async function sendATCommand(cmd) {
+            if (!obdCharacteristic) return;
+            logTerminal(`TX: ${cmd.trim()}`);
+            let encoder = new TextEncoder();
+            await obdCharacteristic.writeValue(encoder.encode(cmd));
+        }
+
+        function startPolling() {
+            logTerminal("Pidiendo flujo de datos (Live Data)...");
+            pollingInterval = setInterval(async () => {
+                if (!obdCharacteristic) return;
+                
+                await sendATCommand(PIDS.RPM);
+                await new Promise(r => setTimeout(r, 350)); 
+                await sendATCommand(PIDS.SPEED);
+                await new Promise(r => setTimeout(r, 350));
+                await sendATCommand(PIDS.COOLANT_TEMP);
+            }, 2500); 
+        }
+
+        function handleOBDResponse(event) {
+            let decoder = new TextDecoder('utf-8');
+            let response = decoder.decode(event.target.value).trim();
+            logTerminal(`RX: ${response}`);
+
+            if (response.includes("41 0C")) { 
+                let parts = response.split(" ");
+                let a = parseInt(parts[2], 16);
+                let b = parseInt(parts[3], 16);
+                let rpm = ((a * 256) + b) / 4;
+                document.getElementById('val-rpm').innerText = Math.round(rpm);
+            } 
+            else if (response.includes("41 0D")) { 
+                let parts = response.split(" ");
+                let speed = parseInt(parts[2], 16);
+                document.getElementById('val-speed').innerText = speed;
+            }
+            else if (response.includes("41 05")) { 
+                let parts = response.split(" ");
+                let temp = parseInt(parts[2], 16) - 40;
+                document.getElementById('val-temp').innerText = temp;
+            }
+        }
+    </script>
+</body>
+</html>
