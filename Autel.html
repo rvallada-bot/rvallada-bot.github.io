@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AutoDash Pro - OBDII Dashboard | Autel & Genérico</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none; /* Evita selección accidental en elementos de interfaz */
+        }
+
+        body {
+            background: linear-gradient(145deg, #0a0f1e 0%, #0c1222 100%);
+            font-family: 'Segoe UI', 'Poppins', 'Inter', system-ui, -apple-system, 'Roboto', sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+            color: #eef5ff;
+        }
+
+        /* Dashboard container */
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 28px;
+            background: rgba(18, 25, 45, 0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 2rem;
+            padding: 1rem 2rem;
+            border: 1px solid rgba(72, 187, 255, 0.2);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .title h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #BEF264, #3B82F6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .title p {
+            font-size: 0.8rem;
+            color: #8da3d0;
+            margin-top: 4px;
+        }
+
+        .connection-status {
+            background: #111827;
+            padding: 8px 20px;
+            border-radius: 60px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+            box-shadow: inset 0 1px 1px rgba(255,255,255,0.05), 0 2px 6px rgba(0,0,0,0.4);
+        }
+
+        .led {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background-color: #6b7280;
+            box-shadow: 0 0 0px rgba(0,0,0,0.5);
+            transition: all 0.2s ease;
+        }
+
+        .led.green {
+            background-color: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+        }
+
+        .led.red {
+            background-color: #ef4444;
+            box-shadow: 0 0 6px #ef4444;
+        }
+
+        /* Grid principal */
+        .grid-main {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            border-radius: 1.8rem;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 1.2rem 1.5rem;
+            transition: all 0.2s;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .card:hover {
+            border-color: rgba(56, 189, 248, 0.5);
+            background: rgba(20, 30, 55, 0.8);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+            padding-bottom: 12px;
+            margin-bottom: 18px;
+        }
+
+        .card-header h3 {
+            font-weight: 600;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge {
+            background: #1e293b;
+            padding: 4px 10px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+
+        /* Medidores tipo gauge */
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .gauge-item {
+            text-align: center;
+        }
+
+        .gauge-value {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            background: #0f172a;
+            padding: 8px 0;
+            border-radius: 20px;
+            margin-top: 5px;
+            color: #38bdf8;
+            letter-spacing: 1px;
+        }
+
+        .gauge-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 500;
+            color: #9ca3af;
+            margin-top: 6px;
+        }
+
+        .unit {
+            font-size: 0.9rem;
+            color: #6c86a3;
+        }
+
+        /* Comandos OBD */
+        .command-list {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .command-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0f172a70;
+            padding: 10px 16px;
+            border-radius: 60px;
+            transition: 0.1s;
+        }
+
+        .command-name {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .command-pid {
+            font-family: monospace;
+            font-size: 0.7rem;
+            background: #00000055;
+            padding: 2px 8px;
+            border-radius: 30px;
+        }
+
+        .btn-cmd {
+            background: #1e293b;
+            border: none;
+            color: white;
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.75rem;
+            box-shadow: 0 1px 2px black;
+        }
+
+        .btn-cmd:hover {
+            background: #2d3a5e;
+            transform: scale(0.96);
+            box-shadow: 0 0 6px #3b82f6;
+        }
+
+        .btn-cmd:active {
+            transform: scale(0.94);
+        }
+
+        /* Consola / Log */
+        .console-card {
+            grid-column: 1 / -1;
+        }
+
+        .console-area {
+            background: #030614cc;
+            border-radius: 1.2rem;
+            padding: 14px;
+            height: 140px;
+            overflow-y: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: #a5f3c3;
+            border: 1px solid #2a3a55;
+        }
+
+        .console-line {
+            border-bottom: 1px solid #1e2a3a;
+            padding: 5px 8px;
+            margin: 2px 0;
+            font-family: monospace;
+        }
+
+        .custom-cmd {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .custom-input {
+            flex: 2;
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 10px 16px;
+            border-radius: 60px;
+            color: white;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .custom-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .btn-send {
+            background: #2563eb;
+            border: none;
+            padding: 0 24px;
+            border-radius: 60px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        /* Simulación ECU (mock) */
+        .footer-note {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #4a5b7e;
+            background: rgba(0,0,0,0.3);
+            padding: 12px;
+            border-radius: 40px;
+        }
+
+        @media (max-width: 720px) {
+            .sensor-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="header">
+        <div class="title">
+            <h1>⚡ AutoDash PRO · OBDII</h1>
+            <p>Compatible con escáneres Autel / ELM327 genéricos | Monitor + Comandos ECU</p>
+        </div>
+        <div class="connection-status" id="connStatusPanel">
+            <div class="led" id="statusLed"></div>
+            <span id="statusText">Desconectado</span>
+            <button id="toggleConnBtn" class="btn-cmd" style="background: #1f3a5f;">🔌 Conectar</button>
+        </div>
+    </div>
+
+    <div class="grid-main">
+        <!-- Panel de sensores en tiempo real -->
+        <div class="card">
+            <div class="card-header">
+                <h3>📊 DATOS EN VIVO</h3>
+                <span class="badge">SAE J1979</span>
+            </div>
+            <div class="sensor-grid" id="sensorDataArea">
+                <div class="gauge-item">
+                    <div class="gauge-label">RPM MOTOR</div>
+                    <div class="gauge-value" id="rpmVal">0</div>
+                    <div class="unit">rpm</div>
+                </div>
+                <div class="gauge-item">
+                    <div class="gauge-label">VELOCIDAD</div>
+                    <div class="gauge-value" id="speedVal">0</div>
+                    <div class="unit">km/h</div>
+                </div>
+                <div class="gauge-item">
+                    <div class="gauge-label">TEMP. REFRIGERANTE</div>
+                    <div class="gauge-value" id="coolantVal">--</div>
+                    <div class="unit">°C</div>
+                </div>
+                <div class="gauge-item">
+                    <div class="gauge-label">CARGA MOTOR</div>
+                    <div class="gauge-value" id="loadVal">0</div>
+                    <div class="unit">%</div>
+                </div>
+                <div class="gauge-item">
+                    <div class="gauge-label">TENSIÓN BATERÍA</div>
+                    <div class="gauge-value" id="voltageVal">--</div>
+                    <div class="unit">V</div>
+                </div>
+                <div class="gauge-item">
+                    <div class="gauge-label">TEMP. AIRE ADM.</div>
+                    <div class="gauge-value" id="iatVal">--</div>
+                    <div class="unit">°C</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de comandos rápidos OBDII -->
+        <div class="card">
+            <div class="card-header">
+                <h3>🕹️ ENVÍO DE COMANDOS ECU</h3>
+                <span class="badge">Modos 01 / 03 / 04</span>
+            </div>
+            <div class="command-list" id="commandsList">
+                <!-- comandos predefinidos vía js dinámica, pero puestos estructuralmente -->
+            </div>
+        </div>
+
+        <!-- Consola interactiva + comandos personalizados -->
+        <div class="card console-card">
+            <div class="card-header">
+                <h3>📟 CONSOLA OBD-II</h3>
+                <span class="badge">Raw & Respuestas</span>
+            </div>
+            <div class="console-area" id="consoleLog">
+                <div class="console-line">🔌 Sistema listo. Conéctese a la interfaz OBDII (Autel / Genérico).</div>
+                <div class="console-line">💡 Simulación activa - respuestas simuladas con lógica realista.</div>
+            </div>
+            <div class="custom-cmd">
+                <input type="text" class="custom-input" id="customPidInput" placeholder="Ej: 010C (RPM), 010D (Velocidad), 0141 (Oxígeno), 03 (DTCs)" autocomplete="off">
+                <button id="sendRawCmdBtn" class="btn-send">📡 ENVIAR COMANDO</button>
+                <button id="clearConsoleBtn" class="btn-cmd" style="background:#2d3748;">🗑️ Limpiar</button>
+            </div>
+            <div style="margin-top: 10px; font-size: 0.7rem; color:#667c9e;">
+                ⚡ PID soportados: 0100, 010C, 010D, 0105, 0110, 0142, 03, 04, 0101, 010F...
+            </div>
+        </div>
+    </div>
+    <div class="footer-note">
+        🚗 Dashboard diseñado para Autel MaxiCOM / escáneres OBDII compatibles con ELM327. 
+        En modo simulación (mock) los valores fluctúan para demostración. Al conectar "simulación activa" podrá enviar comandos y recibir respuestas coherentes.
+    </div>
+</div>
+
+<script>
+    // ---------- SIMULADOR OBDII (Mock ECU) ----------
+    // Compatible con comandos OBD estándar, respuesta estilo ELM327
+    // Soporta modo 01 peticiones de datos, modo 03 DTCs, modo 04 clear DTCs
+
+    // Estado de conexión (simulado)
+    let isConnected = false;
+    let refreshInterval = null;
+    
+    // Valores dinámicos simulados para el dashboard
+    let simulatedData = {
+        rpm: 1250,
+        speed: 45,
+        coolant: 87,
+        engineLoad: 32,
+        voltage: 13.8,
+        intakeTemp: 34
+    };
+
+    // Función para simular la generación de datos de sensores (variación realista)
+    function updateSimulatedSensors() {
+        if (!isConnected) {
+            // Si está desconectado, valores por defecto o guiones
+            simulatedData.rpm = 0;
+            simulatedData.speed = 0;
+            simulatedData.coolant = '--';
+            simulatedData.engineLoad = 0;
+            simulatedData.voltage = '--';
+            simulatedData.intakeTemp = '--';
+            return;
+        }
+        // variación suave cuando conectado
+        let deltaRpm = (Math.random() - 0.5) * 80;
+        let newRpm = simulatedData.rpm + deltaRpm;
+        simulatedData.rpm = Math.min(7000, Math.max(600, Math.floor(newRpm)));
+        
+        let deltaSpeed = (Math.random() - 0.5) * 3;
+        let newSpeed = simulatedData.speed + deltaSpeed;
+        simulatedData.speed = Math.min(180, Math.max(0, Math.floor(newSpeed)));
+        
+        let deltaCool = (Math.random() - 0.5) * 1.2;
+        let newCool = (typeof simulatedData.coolant === 'number' ? simulatedData.coolant : 85) + deltaCool;
+        simulatedData.coolant = Math.min(125, Math.max(70, Math.floor(newCool)));
+        
+        let deltaLoad = (Math.random() - 0.5) * 5;
+        let newLoad = simulatedData.engineLoad + deltaLoad;
+        simulatedData.engineLoad = Math.min(98, Math.max(3, Math.floor(newLoad)));
+        
+        let deltaVolt = (Math.random() - 0.5) * 0.15;
+        let newVolt = (typeof simulatedData.voltage === 'number' ? simulatedData.voltage : 13.6) + deltaVolt;
+        simulatedData.voltage = parseFloat(newVolt.toFixed(1));
+        if(simulatedData.voltage > 14.8) simulatedData.voltage = 14.8;
+        if(simulatedData.voltage < 11.5) simulatedData.voltage = 11.5;
+        
+        let deltaIat = (Math.random() - 0.5) * 1.5;
+        let newIat = (typeof simulatedData.intakeTemp === 'number' ? simulatedData.intakeTemp : 32) + deltaIat;
+        simulatedData.intakeTemp = Math.min(65, Math.max(15, Math.floor(newIat)));
+    }
+
+    // Actualizar UI de sensores
+    function refreshSensorDisplay() {
+        document.getElementById('rpmVal').innerText = (isConnected && simulatedData.rpm !== undefined) ? Math.floor(simulatedData.rpm) : '0';
+        document.getElementById('speedVal').innerText = (isConnected && simulatedData.speed !== undefined) ? Math.floor(simulatedData.speed) : '0';
+        document.getElementById('coolantVal').innerHTML = (isConnected && typeof simulatedData.coolant === 'number') ? simulatedData.coolant : '--';
+        document.getElementById('loadVal').innerText = (isConnected && simulatedData.engineLoad !== undefined) ? Math.floor(simulatedData.engineLoad) : '0';
+        document.getElementById('voltageVal').innerHTML = (isConnected && typeof simulatedData.voltage === 'number') ? simulatedData.voltage.toFixed(1) : '--';
+        document.getElementById('iatVal').innerHTML = (isConnected && typeof simulatedData.intakeTemp === 'number') ? simulatedData.intakeTemp : '--';
+    }
+
+    // ----- Motor de respuestas OBDII (simulación inteligente) -----
+    function processObdCommand(command) {
+        if (!isConnected) return "ERROR: VEHÍCULO NO CONECTADO (verifique interfaz OBDII)";
+        // Limpieza de comando: eliminar espacios, convertir upper
+        let cmd = command.trim().toUpperCase().replace(/\s/g, '');
+        // Soporte para comandos hex como "010C", "010D", "0105", "03", "04" etc.
+        // Respuesta estilo: 41 0C 1A F0 ...
+        if (cmd === "0100") {
+            return "SEARCHING...\r\n41 00 BE 3E B8 13";   // PIDs soportados mock
+        }
+        else if (cmd === "010C") { // RPM
+            let rpmRaw = Math.floor(simulatedData.rpm / 4); // A 4 bytes? segun spec: (A*256+B)/4
+            let high = Math.floor(rpmRaw / 256);
+            let low = rpmRaw % 256;
+            return `41 0C ${high.toString(16).padStart(2,'0')} ${low.toString(16).padStart(2,'0')}`;
+        }
+        else if (cmd === "010D") { // Velocidad km/h
+            let speedKmh = Math.floor(simulatedData.speed);
+            return `41 0D ${speedKmh.toString(16).padStart(2,'0')}`;
+        }
+        else if (cmd === "0105") { // Temperatura refrigerante
+            let coolantC = typeof simulatedData.coolant === 'number' ? simulatedData.coolant : 85;
+            let coolantA = coolantC + 40; // offset -40°C
+            return `41 05 ${coolantA.toString(16).padStart(2,'0')}`;
+        }
+        else if (cmd === "0104") { // Carga motor (calc load)
+            let loadVal = simulatedData.engineLoad;
+            let loadHex = Math.round(loadVal * 2.55).toString(16).padStart(2,'0');
+            return `41 04 ${loadHex}`;
+        }
+        else if (cmd === "0142") { // Voltaje batería (control module voltage)
+            let volts = typeof simulatedData.voltage === 'number' ? simulatedData.voltage : 13.6;
+            let scaled = Math.round((volts / 8) * 255);
+            if(scaled>255) scaled=255;
+            return `41 42 ${scaled.toString(16).padStart(2,'0')}`;
+        }
+        else if (cmd === "010F") { // Temp aire admisión IAT
+            let iatC = typeof simulatedData.intakeTemp === 'number' ? simulatedData.intakeTemp : 30;
+            let iatRaw = iatC + 40;
+            return `41 0F ${iatRaw.toString(16).padStart(2,'0')}`;
+        }
+        else if (cmd === "0110") { // MAF air flow rate (simulacion aleatoria)
+            let maf = (Math.random() * 30 + 5).toFixed(0);
+            let mafVal = Math.min(255, Math.floor(maf * 1.2));
+            return `41 10 ${mafVal.toString(16).padStart(2,'0')}`;
+        }
+        else if (cmd === "03") { // Solicitar DTCs
+            return "43 01 02 03 04 00 00 00 00 00"; // códigos simulados: P0102, P0300 etc mock
+        }
+        else if (cmd === "04") { // Clear DTCs / Reset MIL
+            return "44"; // OK
+        }
+        else if (cmd.startsWith("01")) {
+            // Otros PID modo 01 genérico fallback
+            return "7F 01 12"; // Sub-function not supported mock
+        }
+        else {
+            return "7F 11 22"; // comando no soportado
+        }
+    }
+
+    // Actualizar display de conexión
+    function updateConnectionUI() {
+        const led = document.getElementById('statusLed');
+        const statusSpan = document.getElementById('statusText');
+        const btn = document.getElementById('toggleConnBtn');
+        if (isConnected) {
+            led.className = 'led green';
+            statusSpan.innerText = 'Conectado a ECU (OBDII)';
+            btn.innerText = '🔌 Desconectar';
+            btn.style.background = "#4b2e2e";
+        } else {
+            led.className = 'led red';
+            statusSpan.innerText = 'Desconectado';
+            btn.innerText = '🔌 Conectar';
+            btn.style.background = "#1f3a5f";
+            // limpiar datos sensores a cero
+            refreshSensorDisplay();
+        }
+    }
+
+    // Enviar log a la consola
+    function addConsoleLog(message, isError = false) {
+        const consoleDiv = document.getElementById('consoleLog');
+        const logLine = document.createElement('div');
+        logLine.className = 'console-line';
+        const timestamp = new Date().toLocaleTimeString();
+        const prefix = isError ? '❌' : '📟';
+        logLine.innerHTML = `<span style="color:#6c8ebf;">[${timestamp}]</span> ${prefix} ${message}`;
+        consoleDiv.appendChild(logLine);
+        logLine.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Enviar comando (tanto desde botones rápidos como manual)
+    function sendObdCommand(rawCommand, friendlyName = null) {
+        if (!isConnected) {
+            addConsoleLog(`No se puede enviar comando: ECU desconectada. Conecte el escáner OBDII.`, true);
+            return;
+        }
+        let cmdStr = rawCommand.trim().toUpperCase();
+        addConsoleLog(`>> Enviando: ${cmdStr} ${friendlyName ? `(${friendlyName})` : ''}`);
+        // Simular latencia red (respuesta asíncrona)
+        setTimeout(() => {
+            let response = processObdCommand(cmdStr);
+            addConsoleLog(`<< Respuesta OBD: ${response}`);
+            // Si el comando es 04 (Clear DTC) mostrar confirmación extra
+            if(cmdStr === "04" && response.includes("44")){
+                addConsoleLog(`✅ Códigos de falla borrados exitosamente (DTC cleared).`);
+            }
+            // Si es 03 y detectamos DTC, mostrar advertencia mock
+            if(cmdStr === "03") {
+                addConsoleLog(`⚠️ DTCs activos simulados: P0102 (MAF), P0300 (Fallo encendido).`);
+            }
+        }, 80);
+    }
+
+    // Comandos rápidos predefinidos
+    const quickCommands = [
+        { name: "🔁 RPM Motor", pid: "010C", desc: "Revoluciones" },
+        { name: "📟 Velocidad", pid: "010D", desc: "km/h" },
+        { name: "🌡️ Temp. Refrigerante", pid: "0105", desc: "°C" },
+        { name: "⚡ Carga Motor", pid: "0104", desc: "%" },
+        { name: "🔋 Voltaje Batería", pid: "0142", desc: "V" },
+        { name: "❄️ Temp. Aire Admisión", pid: "010F", desc: "IAT" },
+        { name: "⚠️ Leer DTCs", pid: "03", desc: "Códigos falla" },
+        { name: "🧹 Borrar DTCs", pid: "04", desc: "Reset MIL" }
+    ];
+
+    function buildCommandsPanel() {
+        const container = document.getElementById('commandsList');
+        container.innerHTML = '';
+        quickCommands.forEach(cmd => {
+            const row = document.createElement('div');
+            row.className = 'command-row';
+            row.innerHTML = `
+                <div>
+                    <div class="command-name">${cmd.name}</div>
+                    <div class="command-pid">${cmd.pid}</div>
+                </div>
+                <button class="btn-cmd cmd-send-btn" data-pid="${cmd.pid}" data-name="${cmd.name}">ENVIAR</button>
+            `;
+            container.appendChild(row);
+        });
+        // event listeners dinámicos
+        document.querySelectorAll('.cmd-send-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pid = btn.getAttribute('data-pid');
+                const name = btn.getAttribute('data-name');
+                sendObdCommand(pid, name);
+            });
+        });
+    }
+
+    // Conexión simulada: iniciar / detener refreshing de datos
+    function setConnection(connected) {
+        isConnected = connected;
+        if (isConnected) {
+            // Iniciar actualización periódica de valores simulados y UI
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                if (isConnected) {
+                    updateSimulatedSensors();
+                    refreshSensorDisplay();
+                } else {
+                    refreshSensorDisplay();
+                }
+            }, 500);
+            addConsoleLog("🔌 Conexión OBDII establecida con la ECU (simulador Autel/Genérico). Los datos en vivo están activos.");
+            // Forzar valores iniciales
+            updateSimulatedSensors();
+            refreshSensorDisplay();
+        } else {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            // resetear display de sensores
+            refreshSensorDisplay();
+            addConsoleLog("⛔ Desconectado del vehículo. Los comandos no tendrán efecto.");
+        }
+        updateConnectionUI();
+    }
+
+    // Eventos UI
+    function initEvents() {
+        document.getElementById('toggleConnBtn').addEventListener('click', () => {
+            setConnection(!isConnected);
+        });
+        document.getElementById('sendRawCmdBtn').addEventListener('click', () => {
+            const inputEl = document.getElementById('customPidInput');
+            let rawCmd = inputEl.value.trim();
+            if (rawCmd === "") {
+                addConsoleLog("Ingrese un comando OBD válido (ej: 010C, 010D, 03)", true);
+                return;
+            }
+            sendObdCommand(rawCmd, "comando personalizado");
+            inputEl.value = "";
+        });
+        document.getElementById('clearConsoleBtn').addEventListener('click', () => {
+            const consoleDiv = document.getElementById('consoleLog');
+            consoleDiv.innerHTML = '<div class="console-line">🧹 Consola limpiada. Historial borrado.</div>';
+        });
+        document.getElementById('customPidInput').addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') {
+                document.getElementById('sendRawCmdBtn').click();
+            }
+        });
+    }
+
+    // inicializacion
+    function init() {
+        buildCommandsPanel();
+        initEvents();
+        // setear desconectado por defecto
+        setConnection(false);
+        // Actualizar display cada medio segundo incluso desconectado muestra 0
+        if(!refreshInterval) {
+            refreshInterval = setInterval(() => {
+                if(!isConnected) refreshSensorDisplay();
+            }, 700);
+        }
+    }
+    init();
+</script>
+</body>
+</html>
