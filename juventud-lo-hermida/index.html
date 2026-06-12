@@ -113,17 +113,17 @@
             '3ra-adulto': {
                 titulo: '3ra Adulto',
                 integrantes: ['Carlos Pérez', 'Luis González', 'Miguel Soto', 'Fernando Rojas', 'Andrés Díaz', 'Ricardo Muñoz'],
-                img: 'imagenes/3ra-adulto/equipo.jpg'
+                img: 'imagenes/3ra_adulto/equipo.jpg'
             },
             '2da-adulto': {
                 titulo: '2da Adulto',
                 integrantes: ['Juan López', 'Pedro Martínez', 'Sergio Ramírez', 'Diego Castro', 'Pablo Herrera', 'Cristián Fuentes'],
-                img: 'imagenes/2da-adulto/equipo.jpg'
+                img: 'imagenes/2da_adulto/equipo.jpg'
             },
             '1ra-adulto': {
                 titulo: '1ra Adulto',
                 integrantes: ['Marcelo Salas', 'Iván Zamorano', 'Claudio Bravo', 'Arturo Vidal', 'Gary Medel', 'Charles Aránguiz'],
-                img: 'imagenes/1ra-adulto/equipo.jpg'
+                img: 'imagenes/1ra_adulto/equipo.jpg'
             },
             'infantiles': {
                 titulo: 'Infantiles',
@@ -145,28 +145,28 @@
             document.getElementById(sectionId).classList.add('active');
         }
 
-        // Función para mostrar categoría
-        function showCategoria(categoria) {
-            const data = categoriasData[categoria];
-            if (data) {
-                const container = document.getElementById('contenido-categoria');
-                let integrantesHTML = '<ul>';
-                data.integrantes.forEach(integrante => {
-                    integrantesHTML += `<li>${integrante}</li>`;
-                });
-                integrantesHTML += '</ul>';
+		// Función para mostrar categoría
+		function showCategoria(categoria) {
+			const data = categoriasData[categoria];
+			if (data) {
+				const container = document.getElementById('contenido-categoria');
+				let integrantesHTML = '<ul>';
+				data.integrantes.forEach(integrante => {
+					integrantesHTML += `<li>${integrante}</li>`;
+				});
+				integrantesHTML += '</ul>';
 
-                container.innerHTML = `
-                    <div class="categoria-detalle">
-                        <h3>${data.titulo}</h3>
-                        <img src="${data.img}" alt="${data.titulo}" onerror="this.src='https://via.placeholder.com/400x250?text=Imagen+no+disponible'">
-                        <h4>Integrantes:</h4>
-                        ${integrantesHTML}
-                    </div>
-                `;
-                showSection('categorias');
-            }
-        }
+				container.innerHTML = `
+					<div class="categoria-detalle">
+						<h3>${data.titulo}</h3>
+						<img src="${data.img}" alt="${data.titulo}" onerror="this.onerror=null; this.src='https://placehold.co/400x250?text=Imagen+no+disponible';">
+						<h4>Integrantes:</h4>
+						${integrantesHTML}
+					</div>
+				`;
+				showSection('categorias');
+			}
+		}
 
         // Cargar noticias desde archivos .txt
         async function cargarNoticias() {
