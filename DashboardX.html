@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBD2 Universal Scanner Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f141c;
+            --panel-color: #1a222d;
+            --accent-color: #00e5ff;
+            --text-color: #ffffff;
+            --text-muted: #708090;
+            --success: #00e676;
+            --warning: #ffea00;
+            --danger: #ff1744;
+            --purple: #9c27b0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--panel-color);
+            padding: 15px 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #2d3d52;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .logo {
+            font-weight: bold;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            color: var(--accent-color);
+        }
+
+        .logo span { color: var(--text-color); }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+        }
+
+        .btn:hover {
+            background-color: #00b3cc;
+            box-shadow: 0 0 10px rgba(0,229,255,0.5);
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #e00013;
+        }
+
+        .btn-purple {
+            background-color: var(--purple);
+            color: white;
+        }
+
+        .select-protocol {
+            background-color: #0a0e14;
+            color: var(--text-color);
+            border: 1px solid var(--accent-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            background-color: var(--danger);
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot.scanning {
+            background-color: var(--warning);
+            animation: pulse 1s infinite alternate;
+        }
+
+        .dot.connected { background-color: var(--success); }
+
+        @keyframes pulse {
+            from { opacity: 0.4; }
+            to { opacity: 1; }
+        }
+
+        /* Grid Principal */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* Contenedor Izquierdo */
+        .left-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .gauge-card {
+            background-color: var(--panel-color);
+            border: 1px solid #2d3d52;
+            border-radius: 12px;
+            padding: 15px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+
+        .gauge-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .gauge-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background-color: var(--accent-color);
+        }
+
+        .gauge-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .gauge-value {
+            font-size: 2.2rem;
+            font-weight: 300;
+            margin: 10px 0;
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .gauge-unit {
+            font-size: 0.8rem;
+            color: var(--accent-color);
+            margin-left: 5px;
+        }
+
+        /* Pantalla de Búsqueda */
+        .search-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 20, 28, 0.95);
+            border-radius: 12px;
+            border: 2px dashed var(--warning);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .radar {
+            width: 120px;
+            height: 120px;
+            border: 2px solid var(--warning);
+            border-radius: 50%;
+            position: relative;
+            margin-bottom: 20px;
+            box-shadow: 0 0 20px rgba(255, 234, 0, 0.2);
+        }
+
+        .radar::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 50%; height: 2px;
+            background: linear-gradient(90deg, var(--warning), transparent);
+            transform-origin: left center;
+            animation: radar-sweep 2s linear infinite;
+        }
+
+        @keyframes radar-sweep {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Gráfica */
+        .chart-container {
+            background-color: var(--panel-color);
+            border: 1px solid #2d3d52;
+            border-radius: 12px;
+            padding: 15px;
+        }
+
+        .chart-container h4 {
+            color: var(--accent-color);
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        canvas {
+            max-height: 200px;
+            width: 100%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .panel {
+            background-color: var(--panel-color);
+            border: 1px solid #2d3d52;
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel h3 {
+            font-size: 1rem;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #2d3d52;
+            padding-bottom: 6px;
+            color: var(--accent-color);
+        }
+
+        .terminal {
+            background-color: #0a0e14;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #00ff00;
+            overflow-y: auto;
+            max-height: 180px;
+        }
+
+        .dtc-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+
+        .dtc-item {
+            background-color: #0a0e14;
+            padding: 8px;
+            border-radius: 6px;
+            border-left: 3px solid var(--danger);
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .dtc-clear {
+            margin-top: 10px;
+            font-size: 0.7rem;
+            text-align: right;
+        }
+
+        .device-filter {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .device-filter input {
+            flex: 1;
+            background-color: #0a0e14;
+            border: 1px solid #2d3d52;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .device-filter input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .scrollable {
+            overflow-y: auto;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+            .gauge-value {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">UNIVERSAL_<span>OBD2</span> PRO</div>
+        <div class="controls">
+            <div class="device-filter">
+                <input type="text" id="device-name-filter" placeholder="Filtrar por nombre..." value="">
+                <button class="btn" id="search-by-name-btn">🔍 Buscar por nombre</button>
+            </div>
+            <select id="protocol-select" class="select-protocol">
+                <option value="0">Auto Detect (ATSP0)</option>
+                <option value="1">SAE J1850 PWM (ATSP1)</option>
+                <option value="2">SAE J1850 VPW (ATSP2)</option>
+                <option value="3">ISO 9141-2 (ATSP3)</option>
+                <option value="4">ISO 14230 KWP (ATSP4)</option>
+                <option value="5">ISO 14230 KWP Fast (ATSP5)</option>
+                <option value="6">ISO 15765 CAN (ATSP6)</option>
+                <option value="7">ISO 15765 CAN 11/500 (ATSP7)</option>
+                <option value="8">ISO 15765 CAN 29/500 (ATSP8)</option>
+                <option value="9">ISO 15765 CAN 11/250 (ATSP9)</option>
+            </select>
+            <button class="btn" id="apply-protocol-btn">Aplicar Protocolo</button>
+            <button class="btn btn-danger" id="clear-dtc-btn">Limpiar DTCs</button>
+            <div class="status-indicator">
+                <span id="status-dot" class="dot"></span>
+                <span id="status-text">DESCONECTADO</span>
+            </div>
+            <button class="btn" id="connect-btn">Buscar Escáner</button>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        
+        <div class="left-container">
+            <div class="display-container" style="position: relative;">
+                <div class="search-overlay" id="search-screen">
+                    <div class="radar"></div>
+                    <div class="search-status-text" id="search-msg">Escaneando Canales Bluetooth...</div>
+                    <p style="color: var(--text-muted); margin-top: 10px; font-size: 0.8rem; text-align: center;">Buscando interfaces OBD2 / ELM327 / Viecar / V-Gate</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="gauge-card"><div class="gauge-label">RPM</div><div class="gauge-value"><span id="val-rpm">0</span><span class="gauge-unit">rpm</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Velocidad</div><div class="gauge-value"><span id="val-speed">0</span><span class="gauge-unit">km/h</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Temp. Refrigerante</div><div class="gauge-value"><span id="val-temp">0</span><span class="gauge-unit">°C</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Carga del Motor</div><div class="gauge-value"><span id="val-load">0</span><span class="gauge-unit">%</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Posición Acelerador</div><div class="gauge-value"><span id="val-throttle">0</span><span class="gauge-unit">%</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Voltaje OBD</div><div class="gauge-value"><span id="val-voltage">0.0</span><span class="gauge-unit">V</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Presión Absoluta (MAP)</div><div class="gauge-value"><span id="val-map">0</span><span class="gauge-unit">kPa</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Flujo de Aire (MAF)</div><div class="gauge-value"><span id="val-maf">0</span><span class="gauge-unit">g/s</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Avance de Encendido</div><div class="gauge-value"><span id="val-spark">0</span><span class="gauge-unit">°</span></div></div>
+                    <div class="gauge-card"><div class="gauge-label">Presión de Combustible</div><div class="gauge-value"><span id="val-fuelpress">0</span><span class="gauge-unit">kPa</span></div></div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h4>📈 RPM Histórico (últimos 30 segundos)</h4>
+                <canvas id="rpmChart"></canvas>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="panel">
+                <h3>🔧 Diagnóstico de Errores (DTC)</h3>
+                <div class="dtc-container" id="dtc-box">
+                    <div style="color: var(--success); font-size: 0.85rem;">Sistemas escaneados OK. Sin códigos de falla.</div>
+                </div>
+                <div class="dtc-clear"><small>Los DTCs se almacenan localmente</small></div>
+            </div>
+            
+            <div class="panel">
+                <h3>📡 Terminal RX/TX Monitor</h3>
+                <div class="terminal" id="terminal-log">> Interfaz lista. Inicie búsqueda universal...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // UUID para perfil serie RFCOMM (estándar OBD2)
+        const SERIAL_PORT_UUID = '00001101-0000-1000-8000-00805f9b34fb';
+        
+        let bluetoothDevice = null;
+        let obdCharacteristic = null;
+        let pollingInterval = null;
+        let currentProtocol = "0";
+        
+        // Almacenamiento de datos históricos para gráfica
+        let rpmHistory = [];
+        let timeLabels = [];
+        let rpmChart = null;
+        
+        // Almacenamiento local de DTCs
+        let storedDTCs = JSON.parse(localStorage.getItem('obd2_dtcs') || '[]');
+        
+        // Mapeo de PID extendidos
+        const EXTENDED_PIDS = {
+            RPM: '010C\r',
+            SPEED: '010D\r',
+            COOLANT_TEMP: '0105\r',
+            ENGINE_LOAD: '0104\r',
+            THROTTLE_POS: '0111\r',
+            VOLTAGE: '0142\r',
+            MAP: '010B\r',
+            MAF: '0110\r',
+            SPARK_ADV: '010E\r',
+            FUEL_PRESSURE: '010A\r'
+        };
+        
+        // DOM Elements
+        const connectBtn = document.getElementById('connect-btn');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const terminalLog = document.getElementById('terminal-log');
+        const searchScreen = document.getElementById('search-screen');
+        const searchMsg = document.getElementById('search-msg');
+        const protocolSelect = document.getElementById('protocol-select');
+        const applyProtocolBtn = document.getElementById('apply-protocol-btn');
+        const clearDtcBtn = document.getElementById('clear-dtc-btn');
+        const searchByNameBtn = document.getElementById('search-by-name-btn');
+        const deviceNameFilter = document.getElementById('device-name-filter');
+        
+        // Inicializar DTCs desde localStorage
+        function updateDTCList() {
+            const dtcBox = document.getElementById('dtc-box');
+            if (storedDTCs.length === 0) {
+                dtcBox.innerHTML = '<div style="color: var(--success); font-size: 0.85rem;">✅ Sistemas escaneados OK. Sin códigos de falla.</div>';
+                return;
+            }
+            dtcBox.innerHTML = storedDTCs.map(dtc => 
+                `<div class="dtc-item">🔴 ${dtc.code} - ${dtc.description}<br><small>${dtc.date}</small></div>`
+            ).join('');
+        }
+        
+        function addDTC(code, description) {
+            if (!storedDTCs.some(d => d.code === code)) {
+                storedDTCs.unshift({
+                    code: code,
+                    description: description,
+                    date: new Date().toLocaleString()
+                });
+                if (storedDTCs.length > 20) storedDTCs.pop();
+                localStorage.setItem('obd2_dtcs', JSON.stringify(storedDTCs));
+                updateDTCList();
+                logTerminal(`⚠️ DTC detectado: ${code} - ${description}`);
+            }
+        }
+        
+        function clearDTCs() {
+            storedDTCs = [];
+            localStorage.setItem('obd2_dtcs', JSON.stringify(storedDTCs));
+            updateDTCList();
+            logTerminal("Códigos DTC eliminados del almacenamiento local.");
+            // Enviar comando AT para borrar DTCs del ECU si está conectado
+            if (obdCharacteristic) {
+                sendATCommand('AT04\r'); // Borrar códigos de diagnóstico
+                logTerminal("Comando AT04 enviado al ECU para limpiar DTCs.");
+            }
+        }
+        
+        // Inicializar gráfica
+        function initChart() {
+            const ctx = document.getElementById('rpmChart').getContext('2d');
+            rpmChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'RPM',
+                        data: [],
+                        borderColor: '#00e5ff',
+                        backgroundColor: 'rgba(0, 229, 255, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { labels: { color: '#ffffff' } }
+                    },
+                    scales: {
+                        y: { grid: { color: '#2d3d52' }, ticks: { color: '#ffffff' } },
+                        x: { grid: { color: '#2d3d52' }, ticks: { color: '#708090', maxRotation: 45 } }
+                    }
+                }
+            });
+        }
+        
+        function updateChart(rpm) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString().slice(0, 5);
+            rpmHistory.push(rpm);
+            timeLabels.push(timeStr);
+            
+            if (rpmHistory.length > 30) {
+                rpmHistory.shift();
+                timeLabels.shift();
+            }
+            
+            if (rpmChart) {
+                rpmChart.data.labels = timeLabels;
+                rpmChart.data.datasets[0].data = rpmHistory;
+                rpmChart.update();
+            }
+        }
+        
+        // Logging en terminal
+        function logTerminal(msg) {
+            const terminal = document.getElementById('terminal-log');
+            terminal.innerHTML += `<br>> ${msg}`;
+            terminal.scrollTop = terminal.scrollHeight;
+            if (terminal.children.length > 200) {
+                terminal.innerHTML = terminal.innerHTML.slice(-10000);
+            }
+        }
+        
+        async function sendATCommand(cmd) {
+            if (!obdCharacteristic) return false;
+            logTerminal(`TX: ${cmd.trim()}`);
+            try {
+                let encoder = new TextEncoder();
+                await obdCharacteristic.writeValue(encoder.encode(cmd));
+                return true;
+            } catch(e) {
+                logTerminal(`Error TX: ${e.message}`);
+                return false;
+            }
+        }
+        
+        async function applyProtocol() {
+            if (!obdCharacteristic) {
+                logTerminal("No hay conexión activa. Conecte un escáner primero.");
+                return;
+            }
+            const protocol = protocolSelect.value;
+            currentProtocol = protocol;
+            await sendATCommand(`ATSP${protocol}\r`);
+            setTimeout(async () => {
+                await sendATCommand('ATZ\r');
+                logTerminal(`Protocolo cambiado a: ${protocolSelect.options[protocolSelect.selectedIndex].text}`);
+            }, 300);
+        }
+        
+        // Búsqueda por nombre específico
+        async function searchByDeviceName() {
+            const filterName = deviceNameFilter.value.trim();
+            if (!filterName) {
+                logTerminal("Ingrese un nombre de dispositivo para buscar.");
+                return;
+            }
+            
+            if (!navigator.bluetooth) {
+                logTerminal("Error: Web Bluetooth no soportado.");
+                return;
+            }
+            
+            searchScreen.style.display = 'flex';
+            searchMsg.innerText = `Buscando dispositivo: ${filterName}...`;
+            
+            try {
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: filterName }],
+                    optionalServices: [SERIAL_PORT_UUID]
+                });
+                await completeConnection();
+            } catch (error) {
+                searchScreen.style.display = 'none';
+                logTerminal(`No se encontró "${filterName}": ${error.message}`);
+                statusText.innerText = "DESCONECTADO";
+                statusDot.className = "dot";
+            }
+        }
+        
+        async function completeConnection() {
+            try {
+                searchMsg.innerText = `Conectando a ${bluetoothDevice.name || 'Dispositivo'}...`;
+                const server = await bluetoothDevice.gatt.connect();
+                searchMsg.innerText = "Obteniendo servicio serie...";
+                const service = await server.getPrimaryService(SERIAL_PORT_UUID);
+                obdCharacteristic = await service.getCharacteristic(SERIAL_PORT_UUID);
+                await obdCharacteristic.startNotifications();
+                obdCharacteristic.addEventListener('characteristicvaluechanged', handleOBDResponse);
+                
+                searchScreen.style.display = 'none';
+                statusDot.className = "dot connected";
+                statusText.innerText = `CONECTADO (${bluetoothDevice.name || "OBD2"})`;
+                connectBtn.innerText = "Desconectar";
+                logTerminal(`✅ Conectado a: ${bluetoothDevice.name || 'OBD2 Genérico'}`);
+                
+                // Inicialización completa
+                await sendATCommand('ATZ\r');
+                await new Promise(r => setTimeout(r, 500));
+                await sendATCommand('ATE0\r');
+                await new Promise(r => setTimeout(r, 300));
+                await sendATCommand('ATL0\r');  // Linefeeds off
+                await sendATCommand(`ATSP${currentProtocol}\r`);
+                await new Promise(r => setTimeout(r, 400));
+                await sendATCommand('0100\r');  // Solicitar PIDs soportados
+                
+                startPolling();
+                
+            } catch (err) {
+                searchScreen.style.display = 'none';
+                throw err;
+            }
+        }
+        
+        // Conexión universal (acepta cualquier dispositivo)
+        connectBtn.addEventListener('click', async () => {
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                disconnectDevice();
+                return;
+            }
+            
+            if (!navigator.bluetooth) {
+                logTerminal("Error: Web Bluetooth no soportado (requiere HTTPS).");
+                return;
+            }
+            
+            try {
+                searchScreen.style.display = 'flex';
+                searchMsg.innerText = "Abriendo diálogo de selección universal...";
+                statusDot.className = "dot scanning";
+                statusText.innerText = "BUSCANDO...";
+                
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [SERIAL_PORT_UUID]
+                });
+                
+                await completeConnection();
+                
+            } catch (error) {
+                searchScreen.style.display = 'none';
+                statusDot.className = "dot";
+                statusText.innerText = "DESCONECTADO";
+                logTerminal("Conexión cancelada o error: " + error.message);
+            }
+        });
+        
+        function disconnectDevice() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            }
+            searchScreen.style.display = 'none';
+            statusDot.className = "dot";
+            statusText.innerText = "DESCONECTADO";
+            connectBtn.innerText = "Buscar Escáner";
+            logTerminal("🔌 Escáner desconectado.");
+            // Resetear valores
+            document.getElementById('val-rpm').innerText = '0';
+            document.getElementById('val-speed').innerText = '0';
+            document.getElementById('val-temp').innerText = '0';
+            document.getElementById('val-load').innerText = '0';
+            document.getElementById('val-throttle').innerText = '0';
+            document.getElementById('val-voltage').innerText = '0.0';
+            document.getElementById('val-map').innerText = '0';
+            document.getElementById('val-maf').innerText = '0';
+            document.getElementById('val-spark').innerText = '0';
+            document.getElementById('val-fuelpress').innerText = '0';
+        }
+        
+        function startPolling() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            logTerminal("📊 Iniciando polling de datos en vivo...");
+            
+            const pidList = Object.values(EXTENDED_PIDS);
+            let pidIndex = 0;
+            
+            pollingInterval = setInterval(async () => {
+                if (!obdCharacteristic) return;
+                const pid = pidList[pidIndex % pidList.length];
+                await sendATCommand(pid);
+                pidIndex++;
+            }, 600); // Rotación rápida de PIDs
+        }
+        
+        function parseResponse(response, pid) {
+            // Limpiar respuesta de caracteres no deseados
+            let clean = response.replace(/\r/g, ' ').replace(/\n/g, ' ').trim();
+            let parts = clean.split(' ');
+            
+            // Buscar el patrón de respuesta OBD2 (ej: "41 0C 1A F8")
+            let obdIndex = -1;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (parts[i] === '41' && parts[i+1] === pid) {
+                    obdIndex = i;
+                    break;
+                }
+            }
+            
+            if (obdIndex === -1) return null;
+            
+            const dataBytes = parts.slice(obdIndex + 2);
+            return dataBytes;
+        }
+        
+        function handleOBDResponse(event) {
+            let decoder = new TextDecoder('utf-8');
+            let response = decoder.decode(event.target.value).trim();
+            if (response.length === 0) return;
+            
+            logTerminal(`RX: ${response.substring(0, 80)}`);
+            
+            // RPM (010C)
+            let rpmData = parseResponse(response, '0C');
+            if (rpmData && rpmData.length >= 2) {
+                let a = parseInt(rpmData[0], 16);
+                let b = parseInt(rpmData[1], 16);
+                let rpm = Math.round(((a * 256) + b) / 4);
+                document.getElementById('val-rpm').innerText = rpm;
+                updateChart(rpm);
+            }
+            
+            // Velocidad (010D)
+            let speedData = parseResponse(response, '0D');
+            if (speedData && speedData.length >= 1) {
+                let speed = parseInt(speedData[0], 16);
+                document.getElementById('val-speed').innerText = speed;
+            }
+            
+            // Temperatura (0105)
+            let tempData = parseResponse(response, '05');
+            if (tempData && tempData.length >= 1) {
+                let temp = parseInt(tempData[0], 16) - 40;
+                document.getElementById('val-temp').innerText = temp;
+            }
+            
+            // Carga motor (0104)
+            let loadData = parseResponse(response, '04');
+            if (loadData && loadData.length >= 1) {
+                let load = Math.round(parseInt(loadData[0], 16) * 100 / 255);
+                document.getElementById('val-load').innerText = load;
+            }
+            
+            // Posición acelerador (0111)
+            let throttleData = parseResponse(response, '11');
+            if (throttleData && throttleData.length >= 1) {
+                let throttle = Math.round(parseInt(throttleData[0], 16) * 100 / 255);
+                document.getElementById('val-throttle').innerText = throttle;
+            }
+            
+            // Voltaje (0142)
+            let voltageData = parseResponse(response, '42');
+            if (voltageData && voltageData.length >= 2) {
+                let voltage = (parseInt(voltageData[0], 16) * 256 + parseInt(voltageData[1], 16)) / 1000;
+                document.getElementById('val-voltage').innerText = voltage.toFixed(1);
+            }
+            
+            // MAP (010B)
+            let mapData = parseResponse(response, '0B');
+            if (mapData && mapData.length >= 1) {
+                let map = parseInt(mapData[0], 16);
+                document.getElementById('val-map').innerText = map;
+            }
+            
+            // MAF (0110)
+            let mafData = parseResponse(response, '10');
+            if (mafData && mafData.length >= 2) {
+                let maf = (parseInt(mafData[0], 16) * 256 + parseInt(mafData[1], 16)) / 100;
+                document.getElementById('val-maf').innerText = maf.toFixed(1);
+            }
+            
+            // Avance encendido (010E)
+            let sparkData = parseResponse(response, '0E');
+            if (sparkData && sparkData.length >= 1) {
+                let spark = parseInt(sparkData[0], 16) - 128;
+                document.getElementById('val-spark').innerText = spark;
+            }
+            
+            // Presión combustible (010A)
+            let fuelData = parseResponse(response, '0A');
+            if (fuelData && fuelData.length >= 1) {
+                let fuel = parseInt(fuelData[0], 16) * 3;
+                document.getElementById('val-fuelpress').innerText = fuel;
+            }
+            
+            // Detección de DTCs (respuesta de 03 o 07)
+            if (response.includes('43') || (response.includes('47') && response.length > 10)) {
+                // Patrón simple de detección de códigos
+                let codes = response.match(/[PUCB][0-9]{4}/gi);
+                if (codes) {
+                    codes.forEach(code => {
+                        addDTC(code.toUpperCase(), "Código de falla OBD2 detectado");
+                    });
+                }
+            }
+        }
+        
+        // Event listeners
+        applyProtocolBtn.addEventListener('click', applyProtocol);
+        clearDtcBtn.addEventListener('click', clearDTCs);
+        searchByNameBtn.addEventListener('click', searchByDeviceName);
+        
+        // Manejo de desconexión por parte del dispositivo
+        function setupDisconnectHandler() {
+            if (bluetoothDevice) {
+                bluetoothDevice.addEventListener('gattserverdisconnected', () => {
+                    logTerminal("⚠️ Dispositivo desconectado inesperadamente.");
+                    disconnectDevice();
+                });
+            }
+        }
+        
+        // Inicializar
+        initChart();
+        updateDTCList();
+        
+        // Sobrescribir completeConnection para agregar disconnect handler
+        const originalComplete = completeConnection;
+        window.completeConnection = async function() {
+            await originalComplete();
+            setupDisconnectHandler();
+        };
+        
+        logTerminal("🚀 OBD2 Universal Scanner Pro listo. Seleccione dispositivo o busque por nombre.");
+    </script>
+</body>
+</html>
